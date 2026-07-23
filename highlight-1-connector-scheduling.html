@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>亮点1：多区域连通器智能调度与跨实例路由</title>
+<style>
+  :root {
+    --primary: #1a56db; --primary-light: #e8f0fe;
+    --ok: #0e9f6e; --warn: #c27803; --danger: #e02424;
+    --bg: #f7f8fa; --card: #ffffff; --border: #e5e7eb;
+    --text: #1f2937; --text-sub: #6b7280; --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.75; font-size: 15px; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  header.hero { background: linear-gradient(135deg, #1a3a8f, #1a56db);
+    color: #fff; border-radius: 14px; padding: 34px 36px; margin-bottom: 20px; }
+  header.hero h1 { font-size: 26px; margin-bottom: 10px; }
+  header.hero p { opacity: .92; font-size: 14.5px; }
+  header.hero .tags { margin-top: 14px; }
+  header.hero .tag { display: inline-block; background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.3); border-radius: 20px;
+    padding: 3px 13px; font-size: 12.5px; margin: 3px 6px 0 0; }
+
+  nav.toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 22px; margin-bottom: 24px; position: sticky; top: 10px; z-index: 99;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  nav.toc a { color: var(--primary); text-decoration: none; font-size: 13.5px;
+    margin-right: 16px; white-space: nowrap; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px 32px; margin-bottom: 24px; }
+  h2 { font-size: 21px; color: var(--primary); border-left: 5px solid var(--primary);
+    padding-left: 12px; margin-bottom: 18px; }
+  h3 { font-size: 17px; margin: 22px 0 10px; color: #111827; }
+  h4 { font-size: 15px; margin: 16px 0 8px; color: #374151; }
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin-bottom: 5px; }
+  strong { color: #111827; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 14px; }
+  th { background: var(--primary-light); color: #1e3a8a; text-align: left;
+    padding: 9px 12px; border: 1px solid #d3ddf3; }
+  td { padding: 9px 12px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  pre { background: #0f172a; color: #d8e1f0; border-radius: 10px; padding: 18px 20px;
+    overflow-x: auto; font-size: 13px; line-height: 1.65; margin: 12px 0 18px;
+    font-family: "SF Mono", Menlo, Consolas, monospace; }
+  code.inline { background: var(--code-bg); color: #b91c1c; border-radius: 4px;
+    padding: 1px 6px; font-size: 13px; font-family: Menlo, Consolas, monospace; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px; font-size: 14px; }
+  .callout.key { background: #eef6ff; border-left: 4px solid var(--primary); }
+  .callout.good { background: #f0faf5; border-left: 4px solid var(--ok); }
+  .callout.warn { background: #fdf8ef; border-left: 4px solid var(--warn); }
+  .callout.fix { background: #fdf2f2; border-left: 4px solid var(--danger); }
+  .callout .t { font-weight: 700; margin-bottom: 4px; display: block; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0; }
+  .flow .node { background: var(--primary-light); border: 1.5px solid #b5c8f0;
+    color: #1e3a8a; border-radius: 8px; padding: 8px 14px; font-size: 13.5px;
+    font-weight: 600; text-align: center; }
+  .flow .node.hl { background: #1a56db; color: #fff; border-color: #1a56db; }
+  .flow .arrow { color: #9ca3af; font-size: 17px; font-weight: 700; }
+
+  .timeline { border-left: 3px solid #c7d6f5; margin: 14px 0 18px 8px; padding-left: 22px; }
+  .timeline .step { position: relative; margin-bottom: 16px; }
+  .timeline .step::before { content: ""; position: absolute; left: -29.5px; top: 7px;
+    width: 12px; height: 12px; border-radius: 50%; background: var(--primary);
+    border: 2.5px solid #fff; box-shadow: 0 0 0 2px #c7d6f5; }
+  .timeline .step .tlabel { display: inline-block; background: var(--primary); color: #fff;
+    font-size: 12px; font-weight: 700; border-radius: 5px; padding: 1px 9px; margin-right: 8px; }
+  .timeline .step .tbody { margin-top: 4px; font-size: 14px; color: #374151; }
+
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .cols2 { grid-template-columns: 1fr; } }
+  .minicard { border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; background: #fbfcfe; }
+  .minicard h4 { margin-top: 0; }
+
+  .src { font-size: 12.5px; color: var(--text-sub); font-family: Menlo, monospace;
+    background: var(--code-bg); border-radius: 5px; padding: 1px 7px; }
+  footer { text-align: center; color: var(--text-sub); font-size: 12.5px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <h1>亮点 1：多区域连通器智能调度与跨实例路由</h1>
+  <p>钉钉零信任网关（ZTNA）· 数据面 Go 实现 · 解决「用户请求所在实例 ≠ 连通器长连接所在实例」的经典分布式路由问题</p>
+  <div class="tags">
+    <span class="tag">三级就近选路</span><span class="tag">位置注册表</span><span class="tag">心跳租约</span>
+    <span class="tag">双写注册</span><span class="tag">Relay 转发</span><span class="tag">会话亲和</span>
+    <span class="tag">双域名接入</span><span class="tag">SNI 多证书</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#sec-problem">① 问题背景</a>
+  <a href="#sec-overview">② 全链路总览</a>
+  <a href="#sec-domain">③ 域名接入</a>
+  <a href="#sec-register">④ 上线注册</a>
+  <a href="#sec-lease">⑤ 心跳租约</a>
+  <a href="#sec-routing">⑥ 选路与转发</a>
+  <a href="#sec-connmodel">⑥⁺ 连接模型基础课</a>
+  <a href="#sec-example">⑦ 完整实例</a>
+  <a href="#sec-resume">⑧ 简历条目</a>
+  <a href="#sec-qa">⑨ 面试问答</a>
+  <a href="#sec-improve">⑩ 改进点</a>
+</nav>
+
+<!-- ======================= ① 问题背景 ======================= -->
+<section id="sec-problem">
+  <h2>① 问题背景：两个「随机」造成的核心矛盾</h2>
+  <p>网关是 <strong>K8s 多实例 + 多区域</strong>（张家口 zjk / 深圳 sz / 杭州 hz）部署。连通器部署在企业内网，
+     <strong>主动出站</strong>反向拨号连接网关（企业防火墙零入站端口，这是 ZTNA 区别于 VPN 的根本），但：</p>
+  <ul>
+    <li>连通器拨号时，SLB <strong>随机</strong>把这条长连接分到某个网关 Pod A；</li>
+    <li>用户请求进来时，SLB 又<strong>随机</strong>把请求分到 Pod B。</li>
+  </ul>
+  <div class="callout key"><span class="t">核心矛盾</span>
+    「请求所在实例 ≠ 连通器所在实例」是常态。怎么把 B 上的请求送进 A 上的隧道？
+    —— 这与微信/钉钉 IM 网关「消息如何找到用户连的那台接入机」是同构问题。</div>
+  <div class="flow">
+    <div class="node">用户浏览器</div><div class="arrow">→</div>
+    <div class="node">SLB/ALB<br><small>TLS 终止</small></div><div class="arrow">→</div>
+    <div class="node hl">网关 Pod（随机）</div><div class="arrow">→</div>
+    <div class="node">连通器所在 Pod<br><small>relay 一跳</small></div><div class="arrow">→</div>
+    <div class="node">连通器（企业内网）</div><div class="arrow">→</div>
+    <div class="node">内网应用</div>
+  </div>
+  <p><strong>为什么应用要配多个连通器 / 连通器组？</strong>三个业务动机：</p>
+  <ul>
+    <li><strong>高可用</strong>：单台连通器挂了，候选集里的其他实例自动接管；</li>
+    <li><strong>水平扩容</strong>：流量大时加实例分摊（连接数加权随机）；</li>
+    <li><strong>运维单元化</strong>：连通器组作为复用单元，一组连通器服务一批应用。</li>
+  </ul>
+</section>
+
+<!-- ======================= ② 全链路总览 ======================= -->
+<section id="sec-overview">
+  <h2>② 全链路总览：五个阶段</h2>
+  <table>
+    <tr><th style="width:130px">阶段</th><th>做什么</th><th style="width:300px">关键代码</th></tr>
+    <tr><td><strong>0. 配置</strong>（Console）</td>
+      <td>创建连通器（AK/SK/identityCode）、建连通器组、应用绑定多个连通器/组（并集）、域名与证书配置</td>
+      <td><span class="src">console: connector/management/</span></td></tr>
+    <tr><td><strong>域名接入</strong></td>
+      <td>自动域名（uuid 编码进域名，零查库）或自定义域名（上传证书绑 ALB + 查表解析）</td>
+      <td><span class="src">util/httputils/urlutils.go · applicationv2service.go</span></td></tr>
+    <tr><td><strong>1. 上线注册</strong></td>
+      <td>TLS 单向认证 + AK/SK 五步校验 → subId 分配 → 双写注册（内存路由表 + DB 位置表）</td>
+      <td><span class="src">connector/server/connector_server.go · ztna_connector/auth.go</span></td></tr>
+    <tr><td><strong>2. 心跳租约</strong></td>
+      <td>Ping 刷新 gmt_modified 续租；读取侧 60 秒未续约判死（僵尸剔除）</td>
+      <td><span class="src">zconnector.go Modified() · connector_cache_manager.go</span></td></tr>
+    <tr><td><strong>3. 选路</strong></td>
+      <td>候选集在线过滤（5 秒缓存）→ 三级就近（同Pod &gt; 同Region &gt; 跨Region）→ 加权随机 → 会话亲和</td>
+      <td><span class="src">service/connection_manager.go SelectConnectorCode</span></td></tr>
+    <tr><td><strong>4. 转发</strong></td>
+      <td>本 Pod 直接开流；跨 Pod 走 relay 连接池（懒加载+双重检查），单跳防环</td>
+      <td><span class="src">connection_manager.go getRelayConnection</span></td></tr>
+  </table>
+  <div class="callout good"><span class="t">一句话总结（面试可直接用）</span>
+    连通器上线时<strong>双写注册</strong>——连接本体留在接入 Pod 的内存路由表，位置信息（在哪个 Pod / 哪个 Region）写入全局注册表并靠<strong>心跳租约</strong>保活；
+    应用配置多个连通器/组形成候选集，请求到达任意 Pod 后按「<strong>在线过滤 → 三级就近 → 加权随机</strong>」选出目标，
+    不在本 Pod 就 relay 转发一跳。Console 管配置关系，网关管动态调度。</div>
+</section>
+
+<!-- ======================= ③ 域名接入 ======================= -->
+<section id="sec-domain">
+  <h2>③ 域名接入：两种域名，两种解析方式，一种证书架构</h2>
+  <div class="callout key"><span class="t">关键前提</span>
+    网关 Pod 的用户面服务是<strong>纯 HTTP 监听</strong>（<span class="src">web/ztna/router.go → router.Run(":port")</span>，无 TLS/SNI 代码）
+    —— 所有 HTTPS 在阿里云 SLB/ALB 上终止，网关进程只看明文 HTTP 的 Host 头。这决定了自定义域名为什么要「上传证书」。</div>
+
+  <h3>A. 自动生成域名（平台子域名）</h3>
+  <ul>
+    <li>创建应用时自动拼出 <code class="inline">{名称}-{uuid}.gw.ztna-dingtalk.com</code>，映射写入
+        <code class="inline">application_uri</code> 表（GwUri ↔ CorpUri）；</li>
+    <li>基础设施提前一次就绪：DNS 泛解析 <code class="inline">*.gw域名 → SLB</code> + SLB 挂平台<strong>泛域名证书</strong>，
+        新应用即刻可用、零 DNS/证书操作；</li>
+    <li><strong>自描述域名</strong>：解析时去掉网关域名后缀、取最后一个 <code class="inline">-</code> 或 <code class="inline">.</code>
+        之后的段即 app uuid —— 「域名→应用」这个每请求必做的高频操作<strong>零查库</strong>
+        （<span class="src">urlutils.go GetUuid()</span>）。</li>
+  </ul>
+  <pre>oa-4f7a9b2c.gw.ztna-dingtalk.com
+   └──────┘ └──────────────────┘
+    uuid      网关域名后缀(配置 Gateway.Domains)
+→ 字符串切割直接得到 uuid=4f7a9b2c，不查任何表</pre>
+
+  <h3>B. 自定义域名（客户自有域名，需上传证书）</h3>
+  <ol>
+    <li><strong>为什么必须上传证书</strong>：TLS 握手要求服务端出示与访问域名匹配的证书；平台只有
+        <code class="inline">*.ztna-dingtalk.com</code> 泛证书，客户域名的证书只有客户能申请；</li>
+    <li>Console 侧（Java，本人负责模块）：证书+私钥落库 →
+        <code class="inline">AliyunCertificateManager.uploadCertificate()</code> 上传阿里云 →
+        <code class="inline">bindCertificate(regionId, albListenerId, certId)</code> 绑到 ALB 监听；
+        ALB 单监听挂 N 张证书，握手时按 <strong>SNI</strong> 自动选取；</li>
+    <li>应用配置自有域名 → <code class="inline">application.self_domains</code>(JSON) +
+        <code class="inline">application_uri</code> 新增映射行；</li>
+    <li>客户在自己 DNS 服务商配 <strong>CNAME</strong> 指向网关接入地址；</li>
+    <li>网关解析：<code class="inline">IsSelfDomain=true</code>（不匹配平台域名后缀）→ uuid 切不出来 →
+        <strong>查表</strong> <code class="inline">ListByGwUri(url)</code> 反查 uuid
+        （<span class="src">applicationv2service.go getUuidBySelfDomain</span>）。</li>
+  </ol>
+
+  <table>
+    <tr><th>对比项</th><th>自动域名</th><th>自定义域名</th></tr>
+    <tr><td>配置成本</td><td>零（泛解析+泛证书提前就绪）</td><td>上传证书 + 绑 ALB + 客户配 CNAME</td></tr>
+    <tr><td>域名→应用解析</td><td>字符串切割 uuid，<strong>零查库</strong></td><td>查 application_uri 表</td></tr>
+    <tr><td>TLS 证书</td><td>平台泛域名证书</td><td>客户证书，ALB 按 SNI 选</td></tr>
+    <tr><td>业务价值</td><td>开箱即用</td><td>品牌域名、Cookie 域独立</td></tr>
+  </table>
+
+  <div class="callout good"><span class="t">复用设计：一份配置驱动两个引擎</span>
+    <code class="inline">application_uri</code> 的同一行数据：<strong>正向</strong>（Gw2Corp）作为隧道内的转发目标；
+    <strong>反向</strong>（Corp2Gw）驱动响应内容的链接翻译（把页面里写死的内网地址翻译回网关域名），实现存量系统零改造接入。</div>
+</section>
+
+<!-- ======================= ④ 上线注册 ======================= -->
+<section id="sec-register">
+  <h2>④ 阶段 1：连通器上线注册（深度）</h2>
+  <p>连通器部署在企业内网服务器，<strong>主动出站</strong>连接网关公网接入地址
+     （<code class="inline">agent.ztna-dingtalk.com</code>），TCP+TLS 与 QUIC 双协议监听同一端口。</p>
+
+  <h3>4.1 身份认证：传输层 TLS + 应用层 AK/SK 两层</h3>
+  <div class="cols2">
+    <div class="minicard">
+      <h4>第一层：TLS 单向认证（连通器验网关）</h4>
+      <p>网关出示 <strong>ZTNA 自建根 CA</strong>（有效期 2023-2033）签发的服务端证书，连通器内置根 CA 公钥校验「连的确实是钉钉网关」，防中间人。</p>
+      <p class="callout fix" style="margin:8px 0 0"><span class="t">纠错记录</span>
+      连通器接入<strong>不是</strong>双向 mTLS（代码 <span class="src">certificate.go Set[Connector].MTls=false</span>）；
+      双向 mTLS 只用于网关 Pod 之间的 Relay 互连（Set[Relay].MTls=true）。连通器数量大且部署在客户环境，发客户端证书运维成本高，身份靠第二层。</p>
+    </div>
+    <div class="minicard">
+      <h4>第二层：AK/SK 五步校验（网关验连通器）</h4>
+      <ol style="margin-left:18px">
+        <li>用 AK 查 <code class="inline">connector</code> 表，查不到拒绝；</li>
+        <li>查所属租户，企业未注册拒绝；</li>
+        <li><strong>租户状态校验</strong>：试用版过期拒绝接入（商业化控制点做在认证链路里）；</li>
+        <li><strong>SK 校验</strong>：库中不存明文，存 <code class="inline">DES-ECB(SK, key=租户Code)</code> 密文，上报值同算法加密后比对；</li>
+        <li><strong>identityCode 实例校验</strong>：不存在→首次上线<strong>自动创建实例</strong>（自动发现）；存在→校验租户归属一致（防跨租户冒用）+ 未删除。</li>
+      </ol>
+      <p style="font-size:13px;color:#6b7280">失败时把错误写回连通器再断连，便于客户侧排查。<span class="src">connectorservice.go IdentifyConnector</span></p>
+    </div>
+  </div>
+
+  <h3>4.2 认证报文参数来源（auth.Request）</h3>
+  <table>
+    <tr><th style="width:180px">字段</th><th>来源</th><th>用途</th></tr>
+    <tr><td>ak / sk</td><td>Console 创建连通器时生成，管理员复制到配置文件</td><td>身份凭证</td></tr>
+    <tr><td>id (identityCode)</td><td>连通器实例身份标识（安装时配置）</td><td>实例身份，路由表 key</td></tr>
+    <tr><td>ip / hn / os</td><td>连通器进程自采集（内网服务器 IP/主机名/OS）</td><td>Console 展示「装在哪台机器」</td></tr>
+    <tr><td>v (version)</td><td>连通器程序版本号</td><td>灰度升级判断</td></tr>
+    <tr><td>cw / gw 窗口</td><td>连通器配置/默认值</td><td>流控协商；网关<strong>强制钳制到 [32,64]</strong>，不信任客户端上报，防恶意大窗口耗尽内存</td></tr>
+    <tr><td>sm / sc</td><td>能力声明</td><td>多连接/压缩能力协商，新老版本兼容</td></tr>
+    <tr><td>ft (FinishTaskId)</td><td>上次升级任务 ID</td><td>升级回执；认证响应带回未完成任务</td></tr>
+  </table>
+
+  <h3>4.3 Pod IP 怎么获取（关键细节）</h3>
+  <pre>ztnaIp := strings.Split(c.NetConn().LocalAddr().String(), ":")[0]   // auth.go register()</pre>
+  <p>就是这条 TCP 连接的<strong>本端（网关侧）地址</strong>。socket 天然知道两端 IP：
+     <code class="inline">LocalAddr()</code> = 本 Pod IP（写入 ZtnaIp，跨 Pod 寻址用）；
+     <code class="inline">RemoteAddr()</code> = 连通器公网出口 IP（写入 PublicIp，运维排查用）。
+     <strong>不读环境变量、不调 K8s API</strong>。</p>
+
+  <h3>4.4 双写注册：数据面与控制面的分离</h3>
+
+  <h4>4.4.0 零基础前置：内存路由表到底是什么？</h4>
+  <div class="callout key"><span class="t">第一性原理：程序里的「一条 TCP 连接」是一个对象</span>
+    Java 里的 <code class="inline">Socket</code> / Go 里的 <code class="inline">net.Conn</code> = 一个「活的听筒」：
+    对它 <code class="inline">Write()</code> 字节就真的从网卡发出、到达对端。它有两个致命特性：
+    ① 只存在于接住它的那个进程的内存里（文件描述符是进程内编号）；
+    ② 无法序列化存 DB（存进去的只能是描述文字，不是能写字节的听筒本身）。
+    这就是必须双写的根源：DB 存「听筒在哪」，听筒本身只能留在那个 Pod 手里。</div>
+  <p>一个 Pod 同时接着成百上千条连通器连接。选路决定「发给 conn-prod-01」后，Pod 面临的问题是：
+     <strong>手里几千个听筒，哪一个才是通往 conn-prod-01 的？</strong>内存路由表就是回答这个问题的查找索引，
+     Java 完全等价物是 IM 服务器的 <code class="inline">ConcurrentHashMap&lt;String userId, Channel&gt;</code>：
+     给张三推消息 = <code class="inline">onlineUsers.get("zhangsan").writeAndFlush(msg)</code>。</p>
+  <h4>一次转发的四步代码链（它被怎么用）</h4>
+  <pre>① 查表拿对象   conns := identity2conn["conn-prod-01"]; conn := conns[1]
+              → 拿到 ZConnector 对象（包着当初 accept 的 TLS socket）
+              → 放入请求上下文 ctx.Keys[CtxKeyLocalConnector]        // connection_manager.go GetConn
+② 处理器调用   connectorConnection.HttpRequest(ctx, ...)              // http_gatewayserver_handler.go L126
+              → 这个对象不只是数据，它是「能干活的听筒」（Connector 接口有 HttpRequest 方法）
+③ 开流写入     stream := c.Connection.NewStream(streamId, meta, ...)   // zconnector.go L154
+              → 把用户 HTTP 请求字节写进 stream，底层就是对那个 socket 的 Write()
+④ 字节到达     顺着连通器当初主动出站建的那条物理连接（穿过防火墙）到达企业内网，
+              连通器按 streamId 拆出请求转发给 oa.internal:8080</pre>
+  <p style="font-size:13.5px;color:#6b7280">关于「流」只需一句话：一条 TCP 连接同时跑很多个用户请求，每段数据贴 streamId 标签区分——像一条高速公路上不同车牌的车（类似 HTTP/2 stream 思想）。</p>
+
+  <table>
+    <tr><th></th><th>内存路由表</th><th>DB 位置表</th></tr>
+    <tr><td>存什么</td><td><code class="inline">identity2conn[identityCode][subId] = conn</code>（活的连接对象：socket、缓冲区、goroutine）</td>
+        <td>ZtnaIp + Region + PublicIp/PrivateIp + Version + 在线状态</td></tr>
+    <tr><td>可见范围</td><td>仅接入 Pod 进程内（<strong>物理上不可能</strong>放 DB/Redis，类比 Netty Channel 无法序列化）</td>
+        <td>全集群可见</td></tr>
+    <tr><td>服务于</td><td><strong>数据面</strong>：本 Pod 转发流量直接取连接开流</td>
+        <td><strong>控制面</strong>：跨 Pod 选路寻址、Console 在线状态展示、心跳租约载体</td></tr>
+  </table>
+  <div class="callout key"><span class="t">总机类比（一句话记住两张表）</span>
+    DB 位置表 = 全公司共享的<strong>登记簿</strong>（「张三的电话接在 3 号楼 B 前台」，回答去哪个 Pod）；
+    内存路由表 = B 前台桌上<strong>实际插着的那排电话线</strong>（每条线贴名字标签，回答拿起哪个听筒真正写字节）。
+    relay 转发的本质：按登记簿找到 B 前台、把话务转接过去，由 B 前台拿起正确的听筒说话。
+    双写不是冗余，是数据面/控制面分离。</div>
+
+  <h3>4.5 多连接支持（supportMulti / subId）</h3>
+  <p><strong>业务问题</strong>：一个 identityCode 只有一条隧道连接就是单点，吞吐也被单连接限制。
+     允许同一 identityCode 由多进程/多台内网服务器同时在线，每条连接用 <code class="inline">subId</code> 区分。</p>
+  <ul>
+    <li><strong>subId 分配</strong>（DB 全局协调，两条连接可能落在不同 Pod）：
+      先复用「离线或租约过期（60 秒无心跳）」的坑位 → 无可复用则 <code class="inline">max(sub_id)+1</code> 插新行
+      （<span class="src">connector_instance_multi_mapper.go SubIdForMulti</span>）；避免 subId 无限增长；</li>
+    <li>内存表按 <code class="inline">[identityCode][subId]</code> 二级索引；同 Pod 重复注册在 SetConn 冲突拒绝；</li>
+    <li><strong>Leader 干活</strong>：多连接在线时，仅同 Region 最小 subId 的连接负责刷新公共状态（legacy 状态/Region），
+      避免 N 条连接重复写同一行 DB（<span class="src">zconnector.go Modified()</span>）。</li>
+  </ul>
+
+  <h3>4.6 subId 专题：多服务器同Pod 的三种情况</h3>
+  <div class="callout key"><span class="t">一句话定义</span>
+    <strong>subId = 同一个连通器身份下，第几条物理连接的编号</strong>。
+    内存路由表的 key 是 <code class="inline">[identityCode][subId]</code>——
+    第一级定位「哪个身份」，第二级定位「这个身份的第几条连接」。特殊值 <code class="inline">subId=0</code> 是单连接模式（老版本/不支持 multi）的约定值。</div>
+  <p>分配 SQL 里 <strong>where 条件只有 <code class="inline">id=连通器身份</code>，没有 Pod 信息</strong>——
+     <strong>subId 是逻辑编号，由 DB 按身份全局协调；Pod 是物理落点，由 SLB 随机决定；两者解耦</strong>。
+     DB 表 <code class="inline">connector_instance_multi</code> 每行 <code class="inline">(id, sub_id)</code> 还带
+     <code class="inline">ztna_ip</code> 字段记录落点，编号与位置是同一行里的两个独立字段。</p>
+  <h4>情况一：多服务器用【相同】连通器，拨到【同一个】Pod</h4>
+  <pre>服务器A(conn-prod-01) → Pod .2 → 分配 subId
+   ①无空闲坑位 ②max空→0 ③新编号=1
+   内存表：["conn-prod-01"][1] = A的连接
+
+服务器B(conn-prod-01) → 同 Pod .2 → 分配 subId
+   ①subId=1 在线，不算空闲 ②max=1 ③新编号=2
+   内存表：["conn-prod-01"][2] = B的连接
+→ 同 Pod 内存表里 conn-prod-01 下挂了 [1] 和 [2]，互不冲突；
+   选路时都算「同实例」候选，加权随机二选一</pre>
+  <h4>情况二：【不同】连通器，拨到【同一个】Pod</h4>
+  <pre>conn-prod-01 → Pod .2 → 分配 subId=1 （在 prod-01 自己的编号空间）
+conn-prod-02 → Pod .2 → 分配 subId=1 （在 prod-02 自己的编号空间，也是1）
+
+内存表（两级 key，各占各的格子）：
+  ["conn-prod-01"][1] = prod-01的连接
+  ["conn-prod-02"][1] = prod-02的连接
+→ subId 都等于 1，但完全不冲突——印证了 subId 只在「身份内部」唯一，不是全局唯一</pre>
+  <h4>情况三：混合 Pod 的内存表长什么样</h4>
+  <pre>Pod .2 的 identity2conn 实际形态：
+  ["conn-prod-01"][1] = 服务器A        ["conn-prod-01"][2] = 服务器B   ← 同身份，靠subId区分
+  ["conn-prod-02"][1] = 服务器C                                          ← 不同身份，subId重新从1算
+  ["conn-finance"][1] = 服务器D
+  ...（成百上千个身份 × 各自若干条连接）</pre>
+  <div class="callout warn"><span class="t">并发分配的兜底与改进点</span>
+    情况一里 A、B 同时拨到同 Pod，可能都查到 max=1、都想拿 subId=2。
+    <strong>同 Pod 内</strong>：第二个执行 SetConn 时发现格子已被占 → 返回冲突 → 注册失败回滚（<span class="src">auth.go register() SetConn 失败回滚</span>），连通器重连即可恢复；
+    <strong>跨 Pod</strong>：两个 Pod 的内存表互相看不见，这层兜底失效。改进方案：给 <code class="inline">(id, sub_id)</code> 加唯一索引，insert 冲突重试。</div>
+</section>
+
+<!-- ======================= ⑤ 心跳租约 ======================= -->
+<section id="sec-lease">
+  <h2>⑤ 阶段 2：心跳租约与僵尸剔除（Lease 模式）</h2>
+
+  <h3>5.1 业务背景：DB 位置表天生是「历史记录」，不是「实时事实」</h3>
+  <p>所有 Pod 靠位置表回答「conn-prod-01 在哪、活着吗」，但那行「在线@33.1.1.2」只是某时刻写下的历史。下线分两种：</p>
+  <ul>
+    <li><strong>可感知下线</strong>：TCP 断开但 Pod 进程活着 → 读 socket 报错 → 执行 Unregister → DB 标离线，闭环干净；</li>
+    <li><strong>不可感知下线（真正难题）</strong>：<strong>Pod 自己整个死了</strong>（OOM 被杀/宿主机宕机/断电），没机会执行任何清理代码，
+        DB 里的「在线」记录成了谎言 —— <strong>僵尸记录</strong>。危害：选路选中它 → relay 转发到死 Pod → 请求失败，且无人清理会永远错下去。</li>
+  </ul>
+
+  <h3>5.2 方案选择：为什么用租约</h3>
+  <table>
+    <tr><th>方案</th><th>做法</th><th>代价</th></tr>
+    <tr><td>中心化健康检查</td><td>单起探活服务轮询所有 Pod</td><td>多一个组件，它自己也会挂</td></tr>
+    <tr><td>分布式协调组件</td><td>etcd/ZooKeeper 临时节点，会话断自动删</td><td>引入重依赖</td></tr>
+    <tr><td><strong>租约 Lease（本项目）</strong></td><td><strong>记录自带保质期：写方定期续期，读方过期不认</strong></td><td><strong>零新增组件，一个时间戳字段搞定</strong></td></tr>
+  </table>
+  <div class="callout key"><span class="t">保质期类比</span>
+    DB 记录是罐头，<code class="inline">gmt_modified</code> 是生产日期，60 秒是保质期。
+    工厂（Pod）活着就不断生产新日期的罐头（刷时间戳）；超市（读取方）上架前看日期，过期直接下架销毁。
+    工厂猝死了？它生产不出新罐头，旧罐头 60 秒后自动失效——不需要打电话问「你还活着吗」。</div>
+
+  <h3>5.3 三段代码（整条链路就这三步）</h3>
+  <h4>代码① 心跳触发：连通器发 Ping，连接层回调业务</h4>
+  <pre>// connector_server.go L120-124：接入时注册回调
+opts = append(opts, ztnaconn.ConnOptOnPing(zc.Modified), ...)  // ← 收到心跳时回调
+
+// tcpconnection.go L395-403：连接层读到 Ping 帧
+if innerData.IsPing() { lastPingTime = time.Now(); c.pingChan &lt;- innerData }
+// tcpconnection.go L750：Pong 写回成功后触发业务回调
+go c.onPing()   // ← 就是 zc.Modified()</pre>
+  <h4>代码② 续约：Modified → 一条 UPDATE 刷新时间戳</h4>
+  <pre>// connector_instance_mapper.go L157-159：续约的本质就是这条 SQL
+update connector_instance set gmt_modified = now()
+where identity_code='conn-prod-01' and ztna_ip='33.1.1.2'      -- 只续自己Pod名下的记录
+  and (conn_status=在线 or conn_status=优雅下线中)              -- 已判死的不允许靠迟到心跳「诈尸」</pre>
+  <h4>代码③ 判死：读取方加载候选集时看保质期（惰性）</h4>
+  <pre>// connector_cache_manager.go L151-156
+if time.Now().After(GmtModified.Add(time.Minute)) {   // 超过60秒没续约 → 僵尸
+    UpdateConnStatus(..., Disconnected, ...)           // 主动回写离线，顺手销毁
+} else {
+    validIdentityCodes = append(...)                   // 保质期内 → 进候选集
+}</pre>
+  <p style="font-size:13.5px;color:#6b7280">判死是<strong>惰性</strong>的：没有定时任务扫表，而是「谁来读、谁顺手检查、谁负责销毁」，成本摊薄到每次读取，零额外调度。</p>
+
+  <h3>5.4 完整例子：Pod 被 OOM 强杀的时间轴</h3>
+  <pre>10:00:00  subId=1 心跳 → gmt_modified = 10:00:00
+10:00:05  心跳 → gmt_modified = 10:00:05   （每隔几秒续约，记录始终新鲜）
+10:00:30  最后一次续约，gmt_modified = 10:00:30
+
+10:00:31  ★ Pod .2 被 OOM kill，进程瞬间消失（没执行 Unregister）
+          DB 里 subId=1 仍显示「在线@33.1.1.2」—— 僵尸诞生
+
+10:00:31~10:01:30  僵尸窗口期（最长≈60秒租约 + 5秒候选集缓存）
+          选路仍可能选中 subId=1 → relay 到死Pod → 部分请求失败
+          （加权随机下也可能选到 subId=2 成功）
+
+10:01:31  某请求触发候选集重新加载：61s &gt; 60s → 判死！
+          不进候选集 + 回写 Disconnected —— 僵尸被销毁
+
+之后      候选集只剩 subId=2，流量 100% 走 Pod .3，用户无感知
+          （多连通器配置的价值兑现时刻）
+内网侧    连通器客户端发现连接死了 → 自动重连 → SLB 分到健康 Pod
+          → 重新注册（复用已离线的 subId=1 坑位）→ 恢复双连接</pre>
+
+  <h3>5.5 两层「心跳」各管一件事（易混点）</h3>
+  <table>
+    <tr><th></th><th>连接层心跳（Ping/Pong 超时）</th><th>DB 租约（gmt_modified）</th></tr>
+    <tr><td>保什么</td><td>「这条 TCP 连接活着」</td><td>「这条 DB 记录可信」</td></tr>
+    <tr><td>谁检查</td><td>连接两端自己（超时就关连接）</td><td>任何读位置表的 Pod</td></tr>
+    <tr><td>兜什么底</td><td>网络假死/对端无响应 → 关连接触发 Unregister</td><td><strong>进程整个猝死、连清理代码都没跑</strong>的场景</td></tr>
+  </table>
+  <div class="callout good"><span class="t">一句话（面试用语）</span>
+    连接层心跳管「活连接」，处理可感知的死亡；DB 租约管「真记录」，兜底不可感知的死亡。
+    写路径心跳续约 + 读路径过期判死，不依赖任何中心化健康检查组件。</div>
+  <p>配套缓存设计：连通器候选集缓存 TTL 仅 <strong>5 秒</strong>（应用配置缓存 60 秒）——
+     在线状态变化远快于应用配置，<strong>不同数据不同 TTL</strong>。</p>
+</section>
+
+<!-- ======================= ⑥ 选路与转发 ======================= -->
+<section id="sec-routing">
+  <h2>⑥ 阶段 3/4：三级就近选路与 Relay 转发</h2>
+  <h3>6.1 三级就近选路（Locality-Aware Routing）</h3>
+  <pre>候选连通器按物理距离分三档，严格就近优先（SelectConnectorCode）:
+1. 同实例(sameMachine): 连通器连在本 Pod → 直接进隧道，零转发
+2. 同区域(sameRegion) : 连通器在本 Region 其他 Pod → 区域内 relay 一跳
+3. 跨区域(all)        : 其他 Region → 跨区域 relay（{region}-relay.ztna 域名）
+
+同档内按连接数加权随机: StringIntPair{code, 连接数} 加权抽取
+—— 连接多 = 容量大 = 分到流量按比例更多（负载均衡不是简单随机）</pre>
+
+  <h3>6.2 Relay 转发通道：懒加载连接池 + 双重检查</h3>
+  <h4>业务问题</h4>
+  <p>请求到了 Pod B，连通器在 Pod A，需要建一条到 A 的连接把请求送过去。
+     每个请求都现建连接 → 建连耗时（TCP 握手+TLS）高并发下延迟爆炸；
+     启动时全建好 → 浪费（很多 Pod 用不到）且 Pod 动态扩缩容建不全。</p>
+  <h4>解法：懒加载 + 池化 + 双重检查</h4>
+  <ul>
+    <li><strong>懒加载</strong>：第一次需要转发到某 Pod 时才建连接，之后复用；</li>
+    <li><strong>池化</strong>：建一个连接池（MinPool=5, MaxPool=10），多条连接并发承载，避免单条瓶颈；</li>
+    <li><strong>双重检查</strong>：解决"100 个 goroutine 同时发现没连接、同时去建"的浪费问题。</li>
+  </ul>
+  <pre>// connection_manager.go getRelayConnection()
+
+// ①加锁查缓存
+m.lockRelayConnections.Lock()
+conn := m.relayConnections[address]      // 到 Pod A 的池建了没？
+if conn != nil { unlock; return conn }   // 建了 → 直接用
+m.lockRelayConnections.Unlock()          // 没建 → 释放锁（关键！不持锁做耗时IO）
+
+// ②不持锁，建连接池（耗时：TCP握手，几百毫秒）
+vc := ztnaconn.NewVirtualConnection(addrs, {MinPool:5, MaxPool:10})
+
+// ③建完再加锁检查一次
+m.lockRelayConnections.Lock()
+conn = m.relayConnections[address]       // 我建池期间别人建好了吗？
+if conn != nil {
+    vc.Close()                           // 别人已建 → 关掉我白建的
+    return conn.Connection()
+} else {
+    m.relayConnections[address] = vc     // 确实没人建 → 我的入缓存
+    return vc.Connection()
+}</pre>
+  <div class="callout key"><span class="t">为什么不全程持锁？</span>
+    建连接是几百毫秒 IO，持锁期间所有其他地址的转发都被阻塞。
+    所以「查」持锁（微秒级）、「建」不持锁（几百毫秒）、「再查」持锁——<strong>锁只保护 map 读写，不保护耗时 IO</strong>。
+    Java 对照：<code class="inline">ConcurrentHashMap.computeIfAbsent</code> 的思路，但 Go 这里手动优化了"不持锁做耗时操作"。</div>
+
+  <h3>6.3 转发防环：单跳限制</h3>
+  <h4>业务问题</h4>
+  <pre>极端场景（位置表不一致时）：
+  Pod A 收到请求 → 位置表说"在 Pod B" → relay 到 B
+  Pod B 收到请求 → 位置表说"在 Pod A" → relay 回 A
+  → 无限循环！请求弹皮球，永远到不了连通器，白白消耗资源</pre>
+  <h4>解法：FromRelay 标记 + 禁止二次转发</h4>
+  <pre>// connection_manager.go SelectConnector()
+disallowCrossSameRegion := ctx.Keys[CtxKeyFromRelay].(bool) && !FromOtherRegion(ctx)
+// 如果这个请求本身就是 relay 来的 → 禁止再次 relay → 只能本地找或 502</pre>
+  <ul>
+    <li>原始请求（用户直接进来）：<code class="inline">FromRelay=false</code> → 允许 relay 一次；</li>
+    <li>被 relay 转发来的：<code class="inline">FromRelay=true</code> → <strong>禁止再次 relay</strong>，本地内存表找不到就 502 快速失败；</li>
+    <li>链路硬上限：<strong>入口 Pod → 目标 Pod</strong>，两跳封顶，不存在 A→B→C 三跳。</li>
+  </ul>
+  <div class="callout good"><span class="t">设计哲学</span>
+    宁可让个别请求快速失败（502），也绝不允许环路消耗集群资源。
+    <strong>Fail fast 优于 infinite loop</strong>——用户刷新重试即可（此时位置表已更新）。</div>
+
+  <h3>6.4 会话亲和（有状态应用）</h3>
+  <h4>业务问题</h4>
+  <p>有些内网应用是<strong>有状态</strong>的：文件分片上传（片 1 在 A、片 2 到 B → 合并失败）、
+     WebSocket 长连接（建连在 A、后续消息路由到 B → 断连）、本地 Session 老系统。
+     要求：<strong>同一用户/会话的所有请求必须打到同一个连通器实例</strong>。</p>
+  <h4>解法：JWT 承载 connectorCode</h4>
+  <pre>第一次请求（无绑定）：
+  认证通过 → 加权随机选中 subId=1 → 把 connectorCode 写进 JWT Claims → 签发 JWT
+
+后续请求（有绑定）：
+  浏览器带 JWT → 解析 Claims.ConnectorCode
+  → SelectConnectorByCode() → 直达那个特定连通器（跳过加权随机）
+
+绑定失效（目标连通器挂了）：
+  SelectConnectorByCode 失败 → 重新选路 → 触发重新认证 → 签发新 JWT（新 code）
+  → 该用户会话丢失需重试，但服务恢复（影响面=单个用户）</pre>
+  <h4>为什么不用一致性哈希？</h4>
+  <table>
+    <tr><th>方案</th><th>故障影响面</th><th>语义</th></tr>
+    <tr><td>一致性哈希（按 userId）</td><td>连通器上下线 → 哈希环变动 → <strong>一批用户</strong>被重映射</td><td>近似亲和，不精确</td></tr>
+    <tr><td><strong>显式绑定（JWT 承载 code）</strong></td><td>只有绑定的那个连通器挂了才影响<strong>那一个用户</strong></td><td>精确绑定，精确失效</td></tr>
+  </table>
+  <div class="callout key"><span class="t">三者协同（一次请求的完整决策链）</span>
+    请求到达 → <strong>会话亲和</strong>：JWT 有 code？有 → 直达（跳过随机）→
+    没有 → 三级就近 + 加权随机选出目标 →
+    目标在本 Pod？是 → 内存表拿连接 →
+    不在 → <strong>relay 连接池</strong>取连接转发 →
+    目标 Pod 收到（FromRelay=true）→ <strong>防环</strong>：禁止再 relay → 本地内存表找连接。</div>
+
+  <h3>6.5 基础设施补充：SLB 后端挂载与三类流量路径</h3>
+  <p><strong>SLB 要挂网关实例，但不是手动挂，而且不是所有流量都走 SLB：</strong></p>
+  <table>
+    <tr><th style="width:150px">流量类型</th><th>入口</th><th>后端挂载/寻址方式</th><th style="width:110px">走不走 SLB</th></tr>
+    <tr><td>用户 HTTPS 请求</td><td>SLB/ALB（TLS 终止）</td>
+      <td>K8s LoadBalancer Service，<strong>Cloud Controller Manager 自动同步</strong>网关实例（Pod/Node 上下线自动注册/摘除）</td><td>走</td></tr>
+    <tr><td>连通器拨号</td><td>SLB（TCP 透传到连通器端口）</td><td>同上</td><td>走</td></tr>
+    <tr><td>同 Region relay</td><td>无</td>
+      <td>位置表里的 <strong>Pod IP 直连</strong>（tcp://{ZtnaIp}:relayPort）。relay 的目的是「精确到达那一个 Pod」，负载均衡器在此反作用；依赖 VPC 网络插件下 Pod IP 直接可路由</td><td><strong>不走</strong></td></tr>
+    <tr><td>跨 Region relay</td><td>{region}-relay.ztna 内部域名</td>
+      <td><strong>Diamond 配置中心下发地址表</strong> + 客户端随机负载均衡（connect() 先查 DnsConfig[domain] 替换 IP），不依赖公网 DNS</td><td>不走公网 SLB</td></tr>
+  </table>
+  <div class="callout good"><span class="t">发布平滑下线（面试好料）</span>
+    SLB annotation <code class="inline">connection-drain: on / drain-timeout: 60</code>（README）——Pod 下线前 SLB 停止分发新连接并给存量连接 60 秒排空期，
+    配合代码里的 <code class="inline">GraceOffline</code>（网关主动通知连通器优雅迁移重连），实现发布不断连。</div>
+  <div class="callout warn"><span class="t">不确定项</span>
+    Diamond 地址表里配的是对端 Region 内部 SLB 还是网关实例 IP，代码不可证，讲之前需核对部署配置；「配置中心做内部服务发现」机制本身代码可证
+    （<span class="src">cmd/start.go InitDNSConfigFromDiamond · tcpconnection.go connect()</span>）。</div>
+</section>
+
+<!-- ======================= ⑥⁺ 连接模型基础课 ======================= -->
+<section id="sec-connmodel">
+  <h2>⑥⁺ 连接模型基础课（零基础，三个心智模型）</h2>
+
+  <h3>模型一：两张表协作的「三情况转发路径」</h3>
+  <div class="callout key"><span class="t">关键精确化</span>
+    内存路由表的查找不是由入口 Pod「远程去查」的——<strong>每个 Pod 只查自己的</strong>。
+    入口 Pod 永远读不到别的 Pod 的内存，它只是把请求 relay 过去，由目标 Pod 在<strong>自己的</strong>内存表里找连接。</div>
+  <pre>情况1：连通器就连在本 Pod（最快路径）
+  请求进来 → 查自己的内存表 → 命中！直接拿连接开流收发（位置表/relay 不参与）
+
+情况2：连通器在同 Region 其他 Pod
+  查自己的内存表 → 没有 → 查位置表: conn-prod-01 在 33.1.1.2
+  → relay 转发到 33.1.1.2 → 33.1.1.2 查【它自己的】内存表 → 命中 → 开流收发
+
+情况3：连通器在其他 Region
+  同情况2，只是 relay 目标换成 {region}-relay.ztna，最终仍由
+  连通器所在的那个 Pod 查自己的内存表拿连接</pre>
+  <div class="callout warn"><span class="t">面试防露怯</span>
+    如果说成「根据位置表和内存表找到连接」，面试官会追问「你怎么读到别的机器的内存？」。
+    正确表述：<strong>位置表决定「请求该流向哪个 Pod」（跨进程可见），内存表决定「本进程内拿哪个连接对象」（进程私有），中间靠 relay 把请求物理地送过去</strong>。</div>
+
+  <h3>模型二：单条连接的四层对象封装（纵向嵌套）</h3>
+  <p>一个网关进程同时握着四类连接：连通器隧道连接（成百上千条，存内存路由表）、用户 HTTP 连接（框架管）、
+     relay 连接（每目标 5~10 条池化）、DB/Redis 连接池。单机几万条连接对 OS 很平常（每条 = 一个文件描述符 + 缓冲区）。</p>
+  <p>其中一条连通器连接从裸 socket 到内存表里的对象，套了四层，每层加一种能力：</p>
+  <pre>第1层  net.Conn（裸TCP socket）      ← l.Accept() 返回        能力：Write/Read 字节
+第2层  tls.Conn（TLS加密层）         ← tls.Listen             能力：字节自动加解密
+第3层  tcpConnection（隧道层）       ← NewServerConnection    能力：多路复用/心跳/写合并/流控
+第4层  ZConnector（业务层）          ← 认证注册时创建         能力：业务身份/HttpRequest()方法
+
+内存路由表存的是第4层；调用时反着穿回去：
+ZConnector.HttpRequest() → Connection.NewStream() → 加密 → socket 发出</pre>
+  <p style="font-size:13.5px;color:#6b7280">Java 对照：Socket → SSLSocket → Netty Channel(pipeline加编解码/心跳) → 业务 UserSession 对象。
+     另注意对应关系：一条 TCP 连接 = 一个 ZConnector = 一个 subId；但一个连通器身份(identityCode)可有多条连接（supportMulti），所以内存表是两级 key [identityCode][subId]。</p>
+
+  <h3>模型三：一次请求的五段连接接力（横向）</h3>
+  <div class="callout key"><span class="t">术语校准</span>
+    「嵌套」发生在单条连接内部（模型二，纵向）；一次用户请求则是被<strong>多段互相独立的连接分段接力</strong>传递的（横向），
+    网关是「连接之间的搬运工」：读一段、写另一段。</div>
+  <pre>①用户↔SLB     ②SLB↔PodB     ③PodB↔PodA      ④PodA↔连通器      ⑤连通器↔内网应用
+   HTTPS          明文HTTP       relay隧道         连通器隧道          普通HTTP
+  (TCP+TLS)       (TCP)        (自研协议)         (自研协议)           (TCP)
+   短连接          短连接      长连接/池化复用    长连接/常驻            按需建
+                              ↑仅内存表未命中时有这段</pre>
+  <ul>
+    <li><strong>relay 用什么协议</strong>：和连通器隧道同一套自研多路复用协议（ztnaconn 的 Connection/Stream 模型通用）；
+        同 Region <code class="inline">tcp://PodIP</code>（VPC 内不加密），跨 Region <code class="inline">tls://{region}-relay.ztna</code>（Relay 证书 <strong>mTLS</strong>，即 Set[Relay].MTls=true 的用处）；</li>
+    <li><strong>响应不需要重新寻址</strong>：stream 双向，请求从哪个 stream 进来，响应就从同一个 stream 写回，每段原路返回；</li>
+    <li><strong>长短连接分工</strong>：②段用户连接是一次性的，④段隧道是常驻高速公路，一条隧道上同时跑着成百上千个用户请求的 stream
+        ——这就是多路复用存在的原因（不可能每个用户请求都让连通器现拨一条穿防火墙的连接）。</li>
+  </ul>
+</section>
+
+<!-- ======================= ⑦ 完整实例 ======================= -->
+<section id="sec-example">
+  <h2>⑦ 完整实例：杭州某公司发布内网 OA</h2>
+  <p><strong>设定</strong>：租户 Code=<code class="inline">corp123</code>；内网 OA：<code class="inline">http://oa.internal:8080</code>；
+     连通器 <code class="inline">conn-prod-01</code>（AK=<code class="inline">LTAI0001</code>，SK=<code class="inline">abcd1234</code>）；
+     网关张家口集群 3 Pod：33.1.1.1 / .2 / .3；平台域名后缀 <code class="inline">.gw.ztna-dingtalk.com</code>。</p>
+
+  <h3>实例一：连通器上线注册（阶段 1）</h3>
+  <div class="timeline">
+    <div class="step"><span class="tlabel">T1</span>服务器 A(192.168.1.10) 连通器启动
+      <div class="tbody">解析 agent.ztna-dingtalk.com → SLB 随机分到 Pod 33.1.1.2 → TLS 握手（验证网关证书为 ZTNA 根 CA 签发 ✓）</div></div>
+    <div class="step"><span class="tlabel">T2</span>发认证报文
+      <div class="tbody"><code class="inline">{ak:LTAI0001, sk:abcd1234, id:conn-prod-01, v:3.2.0, sm:true, ip:192.168.1.10, hn:prod-a, os:linux, cw:64, gw:64}</code></div></div>
+    <div class="step"><span class="tlabel">T3</span>Pod 33.1.1.2 五步校验
+      <div class="tbody">AK 查到连通器（租户 corp123，未过期）✓；DES(abcd1234, key=corp123) == 库中密文 ✓；conn-prod-01 存在且归属一致 ✓；窗口 64 在 [32,64] 内接受</div></div>
+    <div class="step"><span class="tlabel">T4</span>分配 subId
+      <div class="tbody">connector_instance_multi 无可复用坑位 → subId=1</div></div>
+    <div class="step"><span class="tlabel">T5</span>双写
+      <div class="tbody">内存（仅 Pod .2）：identity2conn["conn-prod-01"][1]=连接；DB（全局）：(conn-prod-01, sub_id=1, ztna_ip=33.1.1.2, region=zjk, private_ip=192.168.1.10, version=3.2.0, 在线)</div></div>
+    <div class="step"><span class="tlabel">T6</span>回 {success:true}，开始心跳，每次 Ping 刷新 gmt_modified（续租）</div>
+    <div class="step"><span class="tlabel">T7</span>服务器 B 启动第二个连通器（同 identityCode）
+      <div class="tbody">SLB 落到 Pod 33.1.1.3 → 同流程 → subId=2。全局视图：conn-prod-01 两条连接分布在两个 Pod</div></div>
+    <div class="step"><span class="tlabel">T8</span>请求落到 Pod 33.1.1.1（本地内存表无 conn-prod-01）
+      <div class="tbody">查位置表：subId1@33.1.1.2、subId2@33.1.1.3 同 Region → 加权随机选一 → relay 转发进隧道</div></div>
+    <div class="step"><span class="tlabel">T9</span>服务器 A 断电（容灾演示）
+      <div class="tbody">Pod .2 感知 TCP 断开 → Unregister；若 Pod .2 整体被强杀 → gmt_modified 60 秒不刷新 → 任意 Pod 下次加载时判死回写离线。期间 subId=2 独自承接全部流量，OA 无感知；subId=1 坑位之后可复用</div></div>
+  </div>
+
+  <h3>实例二：自动域名访问全流程</h3>
+  <div class="timeline">
+    <div class="step"><span class="tlabel">T0</span>Console 创建应用
+      <div class="tbody">内网地址 http://oa.internal:8080，绑定 conn-prod-01，认证=钉钉免登，策略=「仅办公网+工作日」</div></div>
+    <div class="step"><span class="tlabel">T1'</span>Console 后台自动完成
+      <div class="tbody">uuid=4f7a9b2c；域名 <code class="inline">oa-4f7a9b2c.gw.ztna-dingtalk.com</code>；application_uri 写映射：gw_uri=https://oa-4f7a9b2c.gw... ↔ corp_uri=http://oa.internal:8080。<strong>无需任何 DNS/证书操作</strong>（泛解析+泛证书提前就绪）</div></div>
+    <div class="step"><span class="tlabel">T3'</span>员工张三在家访问 /workflow/list
+      <div class="tbody">DNS 泛解析 → SLB → TLS 用泛域名证书终止 → 明文 HTTP 随机进 Pod 33.1.1.1</div></div>
+    <div class="step"><span class="tlabel">T4'</span>域名定位应用（零查库）
+      <div class="tbody">Host 后缀匹配平台域名 → 非自有域名 → 切割出 uuid=4f7a9b2c ✓</div></div>
+    <div class="step"><span class="tlabel">T5'</span>加载 AppCache
+      <div class="tbody">域名双向映射 / 认证方式 / 策略 / 连通器候选集（subId1@33.1.1.2, subId2@33.1.1.3）</div></div>
+    <div class="step"><span class="tlabel">T6'</span>认证：无 JWT → 302 钉钉扫码 → 签发 JWT(userId=zhangsan, corpId=corp123) → 回跳原页</div>
+    <div class="step"><span class="tlabel">T7'</span>策略：在家 IP 不在办公网段 → 白名单未命中 → 403 拦截页（次日到公司 → 放行）</div>
+    <div class="step"><span class="tlabel">T8'</span>选连通器：本 Pod 无连接 → 同 Region 加权随机 → relay 到 Pod 33.1.1.2 → 进隧道</div>
+    <div class="step"><span class="tlabel">T9'</span>连通器转发
+      <div class="tbody">DomainMapGw2Corp: https://oa-4f7a9b2c.gw... → http://oa.internal:8080，内网发起请求（Host 改写为 oa.internal）</div></div>
+    <div class="step"><span class="tlabel">T10'</span>响应链接翻译
+      <div class="tbody">页面里 <code class="inline">&lt;a href="http://oa.internal:8080/approve"&gt;</code> 被 DomainMapCorp2Gw 反向翻译为
+      <code class="inline">&lt;a href="https://oa-4f7a9b2c.gw.ztna-dingtalk.com/approve"&gt;</code> —— OA 系统零改造</div></div>
+  </div>
+
+  <h3>实例三：切换自定义域名 oa.hzcorp.com</h3>
+  <div class="timeline">
+    <div class="step"><span class="tlabel">T11</span>Console 上传证书（本人负责模块）
+      <div class="tbody">证书+私钥落库 → AliyunCertificateManager.uploadCertificate() 上传阿里云 → bindCertificate(regionId, albListenerId, certId) 绑到 ALB 监听。此后 ALB 443 监听挂 N 张证书，握手按 SNI 自动选取</div></div>
+    <div class="step"><span class="tlabel">T12</span>应用添加自有域名
+      <div class="tbody">application.self_domains 写 JSON；application_uri 新增：https://oa.hzcorp.com ↔ http://oa.internal:8080</div></div>
+    <div class="step"><span class="tlabel">T13</span>客户 IT 在自己 DNS 服务商配 CNAME：oa.hzcorp.com → agent.ztna-dingtalk.com</div>
+    <div class="step"><span class="tlabel">T14</span>访问：SNI=oa.hzcorp.com → ALB 选中客户证书终止 TLS → 明文进 Pod</div>
+    <div class="step"><span class="tlabel">T15</span>域名定位应用（查表）
+      <div class="tbody">IsSelfDomain=true → uuid 切不出来 → ListByGwUri("https://oa.hzcorp.com") 查 application_uri → uuid=4f7a9b2c ✓</div></div>
+    <div class="step"><span class="tlabel">T16</span>之后与实例二 T5'~T10' 完全一致；链接翻译目标变为 https://oa.hzcorp.com/...</div>
+  </div>
+</section>
+
+<!-- ======================= ⑧ 简历条目 ======================= -->
+<section id="sec-resume">
+  <h2>⑧ 简历条目定稿</h2>
+  <div class="callout key">
+    设计多区域网关集群下的连通器智能调度体系：通过连通器位置注册表解决「请求实例与长连接实例分离」的分布式路由问题，
+    实现同实例/同区域/跨区域三级就近选路与连接数加权负载均衡；跨实例转发采用懒加载 Relay 连接池（双重检查防并发重复建连）
+    并以单跳限制防转发环路；基于心跳租约 + 读取侧惰性判死实现连通器故障自动摘除；对有状态应用通过 JWT 承载连通器绑定
+    实现会话亲和与故障自动重选。
+  </div>
+  <p><strong>可选补充句</strong>（域名接入，体现 Console+Gateway 全栈闭环）：</p>
+  <div class="callout key">
+    设计双模式域名接入：平台子域名将应用标识编码进域名实现「域名→应用」零查库解析；客户自有域名经控制台完成证书上传与
+    ALB SNI 多证书绑定，域名映射表一份配置同时驱动隧道转发与响应链接翻译。
+  </div>
+</section>
+
+<!-- ======================= ⑨ 面试问答 ======================= -->
+<section id="sec-qa">
+  <h2>⑨ 面试深挖问答清单</h2>
+  <table>
+    <tr><th style="width:290px">可能的追问</th><th>回答要点</th></tr>
+    <tr><td>为什么请求和连通器会不在同一实例？</td>
+      <td>SLB 对两类连接都随机分配，无法感知业务亲和；这是所有「长连接+多实例」系统的固有问题（同 IM 网关）。</td></tr>
+    <tr><td>怎么知道连通器连在哪个实例？</td>
+      <td>上线时接入 Pod 把 (identityCode → 本 Pod IP + Region) 写入 DB 位置注册表；Pod IP 直接取 TCP 连接 LocalAddr()，不依赖 K8s API。</td></tr>
+    <tr><td>为什么三级就近而不是全局随机？</td>
+      <td>同实例零跳、同区域内网一跳、跨区域走专线有延迟/带宽成本；就近省一次实例间转发的序列化+网络开销。</td></tr>
+    <tr><td>转发环路怎么防？</td>
+      <td>FromRelay 标记 + disallowCrossRegion，链路硬上限两跳；宁可 502 也不允许环路。</td></tr>
+    <tr><td>连通器突然挂了怎么办？</td>
+      <td>接入 Pod 感知断连 → 实时摘除；Pod 整体被强杀 → 租约 60 秒过期，读取侧惰性判死回写离线；绑定用户自动重选+重新认证；全部不可用 → 502 快速失败。</td></tr>
+    <tr><td>和一致性哈希方案比较？</td>
+      <td>一致性哈希适合无状态分片；这里是「精确找到连通器实际所在实例」的注册表查找问题。会话亲和用显式绑定，避免节点变动时哈希环漂移导致会话漂移。</td></tr>
+    <tr><td>双重检查那段为什么不全程持锁？</td>
+      <td>建连接池是秒级耗时 IO，持锁会阻塞所有其他地址的转发；宁可小概率重复建连再关闭，也不持锁做 IO。</td></tr>
+    <tr><td>为什么 TLS 终止在 SLB 不在网关？</td>
+      <td>证书生命周期收敛到云平台（ALB SNI 多证书 + Console API 管理绑定/解绑），网关进程无状态、不碰私钥；代价是 Pod 内明文，靠 VPC 内网隔离兜底。</td></tr>
+    <tr><td>两种域名为什么解析方式不一样？</td>
+      <td>平台域名可控，把 uuid 编码进域名换取高频路径零查库；客户域名不可控只能查表。性能与灵活性的取舍。</td></tr>
+    <tr><td>subId 分配有没有并发问题？</td>
+      <td>诚实承认：读从库查 max 再插入存在并发窗口，同 Pod 靠 SetConn 注册冲突兜底；改进方案：唯一索引 (id, sub_id) + 冲突重试。</td></tr>
+    <tr><td>SLB 后端怎么挂载？Pod 上下线怎么同步？</td>
+      <td>K8s LoadBalancer Service + Cloud Controller Manager 自动注册/摘除，非人工维护；发布时 connection-drain 排空 60 秒 + GraceOffline 通知连通器迁移重连，实现不断连发布。relay 流量不走 SLB：同 Region 用位置表 Pod IP 直连（要精确送达，LB 反作用），跨 Region 用配置中心下发地址表 + 客户端随机。</td></tr>
+  </table>
+</section>
+
+<!-- ======================= ⑩ 改进点 ======================= -->
+<section id="sec-improve">
+  <h2>⑩ 诚实素材：可改进点（被问「有什么不足」时用）</h2>
+  <ul>
+    <li><strong>subId 分配并发窗口</strong>：查 max 再 insert 非原子，应加唯一索引 (id, sub_id) + 冲突重试；</li>
+    <li><strong>SK 加密算法</strong>：DES-ECB 属历史选型（弱加密、ECB 模式无 IV），应升级 AES-GCM 或 HMAC 派生比对；</li>
+    <li><strong>Pod 内明文 HTTP</strong>：TLS 终止在 SLB 后 VPC 内为明文，零信任语义上可引入 mTLS service mesh 补全；</li>
+    <li><strong>候选集 5 秒缓存与故障摘除时延</strong>：极端情况下故障连通器最长 5 秒 + 租约 60 秒才被完全摘除，可评估事件驱动的主动失效通知。</li>
+  </ul>
+  <div class="callout warn"><span class="t">表述边界（不要说过头）</span>
+    ① 连通器接入是「TLS 单向认证 + AK/SK」，不要说成 mTLS；② 泛解析 DNS 与 ALB 监听拓扑为基于代码与 README 的推断，
+    对外讲之前建议再核对当时的接入文档；③ 隧道协议层（帧格式/多路复用/流控）不作为本亮点内容，被问到时用一句话带过：
+    「网关与连通器之间是自研多路复用隧道协议，支持 TCP/QUIC，这块由团队网络方向同学主导，我负责其上的调度与业务层」。</div>
+</section>
+
+<footer>
+  亮点 1 研究文档 · 基于 lippi-open-ztna-gateway(Go, v3) 与 lippi-open-ztna(Java, v2 console) 源码调研 · 本文档随会话讨论持续迭代
+</footer>
+
+</div>
+</body>
+</html>
