@@ -113,6 +113,7 @@
   <a href="#sec-resume">⑧ 简历条目</a>
   <a href="#sec-qa">⑨ 面试问答</a>
   <a href="#sec-improve">⑩ 改进点</a>
+  <a href="#sec-mock">⑪ 模拟面试复盘</a>
 </nav>
 
 <!-- ======================= ① 问题背景 ======================= -->
@@ -533,6 +534,60 @@ disallowCrossSameRegion := ctx.Keys[CtxKeyFromRelay].(bool) && !FromOtherRegion(
     <tr><td>一致性哈希（按 userId）</td><td>连通器上下线 → 哈希环变动 → <strong>一批用户</strong>被重映射</td><td>近似亲和，不精确</td></tr>
     <tr><td><strong>显式绑定（JWT 承载 code）</strong></td><td>只有绑定的那个连通器挂了才影响<strong>那一个用户</strong></td><td>精确绑定，精确失效</td></tr>
   </table>
+
+  <h4>会话亲和完整代码链（五步闭环）</h4>
+  <pre>①判定开关 → ②首次请求:预选连通器+塞进登录URL → ③登录回调:写进JWT
+     → ④后续请求:从JWT取code直达 → ⑤失效:重选+强制重新登录</pre>
+  <p><strong>第①步 开关判定</strong>（Nacos 按应用灰度，非亲和应用零开销）：</p>
+  <pre>// httpauth_interceptor.go jwtInvalid()
+if config.NacosConfig.ConnectorPersistenceAppIds.Has(appCache.Uuid) { ... }</pre>
+  <p><strong>第②步 首次请求（无JWT）：先选好人，再去登录</strong>——预选的 code 塞进扫码跳转 URL：</p>
+  <pre>// jwtInvalid()：没有JWT时就先选定连通器
+service.ConnectionManager.SelectConnectorCode(ctx, appCache)  // 三级就近+加权随机
+
+// identifyByJwt()：code 藏进 OAuth 回调地址
+bindConnectorString = "connectorCode=" + bindConnectorCode.(string) + "&"
+redirectLocation = "https://login.dingtalk.com/oauth2/auth?...&redirect_uri=" +
+    url.QueryEscape(".../ddztna/qrauthcallback?" + bindConnectorString + "redirectUrl="+...)</pre>
+  <div class="callout key"><span class="t">精彩细节①：绑定关系借 URL 穿越 SSO</span>
+    网关无状态，用户跳去钉钉扫码再跳回可能落到另一个 Pod——没有服务端存储能记住"刚才选的连通器"。
+    解法：把绑定 code 编码进 OAuth 回调 URL，跟着浏览器跳转走一圈带回来，<strong>零服务端状态</strong>。</div>
+  <p><strong>第③步 登录回调：绑定烧进 JWT</strong>（RS256 签名，客户端改不了）：</p>
+  <pre>// qrauthcallback_servlet.go
+connectorCode := ctx.Query("connectorCode")            // 从回调URL取出
+jwt, _ := sl.getJwtToken(ctx, tenant, userId, connectorCode)
+// → jwtutils.GenerateToken: Claims{..., ConnectorCode: connectorCode}</pre>
+  <p><strong>第④步 后续请求：从 JWT 取 code 直达</strong>（跳过所有随机选路）：</p>
+  <pre>// jwtInvalid()
+connectorCode := jwtResult.Claims.ConnectorCode
+service.ConnectionManager.SelectConnectorByCode(ctx, appCache, connectorCode)
+
+// connection_manager.go GetConnectionByCode()
+//需要遍历check connectorCode有效性，不能直接获取    ← 原代码注释
+for _, code := range codeList {                       // 当前应用的合法候选集
+    if code == connectorCode {                        // JWT里的code必须在候选集内！
+        return conns[rand.Intn(len(conns))]           // 该身份多条连接里随机一条
+    }
+}</pre>
+  <div class="callout key"><span class="t">精彩细节②：候选集二次校验防越权</span>
+    JWT 里的 code 可能来自旧配置（连通器已被解绑）或另一个应用的 JWT——
+    只有 code 仍在<strong>当前应用的合法候选集内</strong>才接受。「永不信任客户端携带的数据」在细节处的体现。</div>
+  <p><strong>第⑤步 绑定失效：重选 + 强制重新认证</strong>：</p>
+  <pre>if !SelectConnectorByCode(...) {                      // 绑定的连通器挂了
+    SelectConnectorCode(ctx, appCache)                // 重选新的
+    return true                                       // 返回"JWT无效"→重新走②③→新JWT新code
+}</pre>
+  <p style="font-size:13.5px;color:#6b7280">为什么强制重新登录而不是悄悄换？旧连通器上的会话状态（已上传的分片）没了，
+     静默切换只会让业务莫名失败。显式打断→重新认证→新绑定，前端有机会感知重试。<strong>宁可明确失败，不要静默错误</strong>。
+     （容器内用户免登无感，容器外才需再扫码。）</p>
+  <pre>业务时间轴（张三上传100MB分片文件）：
+T0  首次访问 → 无JWT → 预选conn-prod-01 → code塞进扫码URL → 跳钉钉
+T1  扫码成功跳回 → 回调URL带code → 烧进JWT(RS256) → 写Cookie
+T2  分片1~4:JWT取code → 候选集校验✓ → 直达conn-prod-01 ✓
+T3  ★conn-prod-01所在Pod宕机(租约60秒判死)
+T4  分片5:SelectConnectorByCode失败 → 重选conn-prod-02 → 强制重新认证 → 新JWT
+T5  前端感知失败重新上传 → 全部分片落在conn-prod-02 ✓</pre>
+
   <div class="callout key"><span class="t">三者协同（一次请求的完整决策链）</span>
     请求到达 → <strong>会话亲和</strong>：JWT 有 code？有 → 直达（跳过随机）→
     没有 → 三级就近 + 加权随机选出目标 →
@@ -737,6 +792,56 @@ ZConnector.HttpRequest() → Connection.NewStream() → 加密 → socket 发出
     ① 连通器接入是「TLS 单向认证 + AK/SK」，不要说成 mTLS；② 泛解析 DNS 与 ALB 监听拓扑为基于代码与 README 的推断，
     对外讲之前建议再核对当时的接入文档；③ 隧道协议层（帧格式/多路复用/流控）不作为本亮点内容，被问到时用一句话带过：
     「网关与连通器之间是自研多路复用隧道协议，支持 TCP/QUIC，这块由团队网络方向同学主导，我负责其上的调度与业务层」。</div>
+</section>
+
+<!-- ======================= ⑪ 模拟面试复盘 ======================= -->
+<section id="sec-mock">
+  <h2>⑪ 模拟面试实战复盘（问题 + 标准答案 + 弱点清单）</h2>
+  <p>一轮完整模拟面试的逐题记录。标准答案统一用<strong>三段式：结论 → 机制 → 取舍</strong>，面试官听到第三层才满意。</p>
+
+  <h3>逐题标准答案</h3>
+  <table>
+    <tr><th style="width:260px">面试官问题</th><th>标准答案（三段式）</th></tr>
+    <tr><td>Q1 这个调度体系解决什么问题？</td>
+      <td>SLB 对用户请求和连通器拨号是两次独立随机分配，「请求所在实例 ≠ 连接所在实例」是常态且不可避免；调度体系保证任意 Pod 收到的请求都能找到并到达正确的连通器连接。可加一句：与 IM 网关「消息找用户接入机」同构。</td></tr>
+    <tr><td>Q2 网关怎么知道连通器在哪个 Pod？</td>
+      <td>上线时双写注册：活连接对象留在接入 Pod 内存路由表（socket 无法序列化，只能留内存）；位置元数据（ZtnaIp+Region+在线）写 DB 全局位置表。内存表管「本进程拿哪条连接」，位置表管「请求流向哪个 Pod」。</td></tr>
+    <tr><td>Q3 请求怎么从 Pod B 到达 Pod A 的连接？</td>
+      <td>查位置表得目标 Pod IP → relay 连接池转发 → 目标 Pod 查自己的内存表拿连接开流。注意表述：每个 Pod 只查自己的内存表，入口 Pod 读不到别人的内存。</td></tr>
+    <tr><td>Q4 高并发下连接池怎么不重复建、不阻塞？</td>
+      <td><strong>双重检查</strong>：查锁 → 不持锁建池（几百毫秒 IO）→ 再查锁（别人建好了就关掉自己的）。取舍：锁只保护 map 读写不保护耗时 IO，宁可小概率重复建再关闭，也不持锁做 IO 阻塞全局。Java 对照 DCL 单例。</td></tr>
+    <tr><td>Q5 Pod 被 OOM 强杀，DB 还写着在线，会怎样？</td>
+      <td>机制：心跳每几秒刷 gmt_modified 续租，60 秒未续约即僵尸，任何 Pod 读取时惰性判死回写离线。数字：60s 租约 + 5s 候选集缓存 ≈ 最坏 65 秒窗口。恢复：窗口内流量由候选集其他健康连接分担；死连接由连通器客户端自动重连回归（复用 subId 坑位）。全程无人工介入。</td></tr>
+    <tr><td>Q6 relay 会不会形成 A↔B 转发环？</td>
+      <td>机制：relay 来的请求带 FromRelay 标记，禁止二次转发，链路硬上限两跳。兜底：目标本地没有就 502 快速失败。取舍：fail fast 优于 infinite loop——502 只影响一个请求，环路消耗整个集群。</td></tr>
+    <tr><td>Q6+ 共用一个 DB 怎么会不一致？（反问）</td>
+      <td>DB 存储本身一致，但四个时间差造成视图与现实不一致：①租约窗口（记录 vs 物理现实）②候选集 5 秒缓存（各 Pod 视图滞后）③主从读延迟（查询走从库）④TOCTOU（查到时 vs 用到时）。所以不追求视图绝对一致，用单跳限制把不一致的影响半径钉死在一跳。</td></tr>
+    <tr><td>Q7 候选集 5 条连接怎么选？</td>
+      <td>优先级：JWT绑定(亲和) &gt; 同Pod &gt; 同Region &gt; 跨Region。「同Pod档」指的是候选连通器里恰好有连接落在当前 Pod 的那些身份（可多个身份多条连接）。同Pod档按<strong>连接数加权</strong>选身份（连接多=容量大），身份内均匀随机选连接；同Region/跨Region档是均匀随机。前提：候选集&gt;1 才有选路，单连接场景自动退化为纯寻址。</td></tr>
+    <tr><td>Q8 为什么有状态应用要固定连通器？为什么不用一致性哈希？</td>
+      <td>场景：分片上传（片1在A片2到B无法合并）、WebSocket、本地Session。方案：JWT 显式绑定 connectorCode。对比：一致性哈希节点变动时哈希环漂移、一批用户批量丢会话；显式绑定故障影响面=单个用户，且失效走显式重选+重新认证而非静默漂移，网关全程零会话状态。</td></tr>
+  </table>
+
+  <h3>表现复盘与弱点清单</h3>
+  <table>
+    <tr><th>题目</th><th>首答表现</th><th>差距</th></tr>
+    <tr><td>Q1 问题定位</td><td>✅ 准确</td><td>可加"IM 同款问题"提档次</td></tr>
+    <tr><td>Q2 双写注册</td><td>✅ 好</td><td>—</td></tr>
+    <tr><td>Q3 relay 链路</td><td>✅ 链路对</td><td>—</td></tr>
+    <tr><td>Q4 双重检查</td><td>❌ 不清楚</td><td>已补，重点背"查锁→不持锁建→再查锁"</td></tr>
+    <tr><td>Q5 心跳租约</td><td>⚠️ 框架对</td><td>数字（60s/5s/65s）与恢复路径缺失</td></tr>
+    <tr><td>Q6 防环</td><td>⚠️ 结论对</td><td>太短：缺 FromRelay 机制与 fail-fast 取舍</td></tr>
+    <tr><td>Q6+ 质疑 DB 一致性前提</td><td>⭐ 全场高光</td><td>保持这种批判性追问</td></tr>
+    <tr><td>Q7 三级选路</td><td>✅ 结构对</td><td>权重没说出来；「档」概念曾混淆</td></tr>
+    <tr><td>Q8 会话亲和</td><td>⚠️ 场景对</td><td>一致性哈希对比不知道（已补）</td></tr>
+  </table>
+  <div class="callout warn"><span class="t">三个集中补强点</span>
+    ① 答案缺「第三层」：练三段式（结论→机制→取舍），别停在"是什么"；
+    ② 关键数字脱口而出：60 秒租约、5 秒候选集缓存、池 5~10 条、窗口≈65 秒、JWT 默认 3 小时；
+    ③ 依据类细节：加权的权=连接数、判死依据=gmt_modified、防环依据=FromRelay 标记。</div>
+  <div class="callout good"><span class="t">保持的优点</span>
+    敢质疑面试官前提（DB 一致性反问）、主动确认边界条件（"前提是配了多个连通器"）——这是好工程师的直觉，面试官看得到。</div>
+  <p><strong>复习方法</strong>：遮住本表答案列自测三遍，每题三段式口述；重点打 Q4/Q5/Q6/Q8 四道薄弱题。</p>
 </section>
 
 <footer>

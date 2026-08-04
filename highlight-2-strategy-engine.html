@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>亮点2：零信任动态访问策略引擎</title>
+<style>
+  :root {
+    --primary: #1a56db; --primary-light: #e8f0fe;
+    --ok: #0e9f6e; --warn: #c27803; --danger: #e02424;
+    --bg: #f7f8fa; --card: #ffffff; --border: #e5e7eb;
+    --text: #1f2937; --text-sub: #6b7280; --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.75; font-size: 15px; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  header.hero { background: linear-gradient(135deg, #1a3a8f, #1a56db);
+    color: #fff; border-radius: 14px; padding: 34px 36px; margin-bottom: 20px; }
+  header.hero h1 { font-size: 26px; margin-bottom: 10px; }
+  header.hero p { opacity: .92; font-size: 14.5px; }
+  header.hero .tags { margin-top: 14px; }
+  header.hero .tag { display: inline-block; background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.3); border-radius: 20px;
+    padding: 3px 13px; font-size: 12.5px; margin: 3px 6px 0 0; }
+
+  nav.toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 22px; margin-bottom: 24px; position: sticky; top: 10px; z-index: 99;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  nav.toc a { color: var(--primary); text-decoration: none; font-size: 13.5px;
+    margin-right: 16px; white-space: nowrap; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px 32px; margin-bottom: 24px; }
+  h2 { font-size: 21px; color: var(--primary); border-left: 5px solid var(--primary);
+    padding-left: 12px; margin-bottom: 18px; }
+  h3 { font-size: 17px; margin: 22px 0 10px; color: #111827; }
+  h4 { font-size: 15px; margin: 16px 0 8px; color: #374151; }
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin-bottom: 5px; }
+  strong { color: #111827; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 14px; }
+  th { background: var(--primary-light); color: #1e3a8a; text-align: left;
+    padding: 9px 12px; border: 1px solid #d3ddf3; }
+  td { padding: 9px 12px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  pre { background: #0f172a; color: #d8e1f0; border-radius: 10px; padding: 18px 20px;
+    overflow-x: auto; font-size: 13px; line-height: 1.65; margin: 12px 0 18px;
+    font-family: "SF Mono", Menlo, Consolas, monospace; }
+  code.inline { background: var(--code-bg); color: #b91c1c; border-radius: 4px;
+    padding: 1px 6px; font-size: 13px; font-family: Menlo, Consolas, monospace; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px; font-size: 14px; }
+  .callout.key { background: #eef6ff; border-left: 4px solid var(--primary); }
+  .callout.good { background: #f0faf5; border-left: 4px solid var(--ok); }
+  .callout.warn { background: #fdf8ef; border-left: 4px solid var(--warn); }
+  .callout.fix { background: #fdf2f2; border-left: 4px solid var(--danger); }
+  .callout .t { font-weight: 700; margin-bottom: 4px; display: block; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0; }
+  .flow .node { background: var(--primary-light); border: 1.5px solid #b5c8f0;
+    color: #1e3a8a; border-radius: 8px; padding: 8px 14px; font-size: 13.5px;
+    font-weight: 600; text-align: center; }
+  .flow .node.hl { background: #1a56db; color: #fff; border-color: #1a56db; }
+  .flow .arrow { color: #9ca3af; font-size: 17px; font-weight: 700; }
+
+  .timeline { border-left: 3px solid #c7d6f5; margin: 14px 0 18px 8px; padding-left: 22px; }
+  .timeline .step { position: relative; margin-bottom: 16px; }
+  .timeline .step::before { content: ""; position: absolute; left: -29.5px; top: 7px;
+    width: 12px; height: 12px; border-radius: 50%; background: var(--primary);
+    border: 2.5px solid #fff; box-shadow: 0 0 0 2px #c7d6f5; }
+  .timeline .step .tlabel { display: inline-block; background: var(--primary); color: #fff;
+    font-size: 12px; font-weight: 700; border-radius: 5px; padding: 1px 9px; margin-right: 8px; }
+  .timeline .step .tbody { margin-top: 4px; font-size: 14px; color: #374151; }
+
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .cols2 { grid-template-columns: 1fr; } }
+  .minicard { border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; background: #fbfcfe; }
+  .minicard h4 { margin-top: 0; }
+
+  .src { font-size: 12.5px; color: var(--text-sub); font-family: Menlo, monospace;
+    background: var(--code-bg); border-radius: 5px; padding: 1px 7px; }
+  footer { text-align: center; color: var(--text-sub); font-size: 12.5px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <h1>亮点 2：零信任动态访问策略引擎</h1>
+  <p>钉钉零信任网关（ZTNA）· 跨端闭环：控制台（Java，本人负责）配置建模 → 网关（Go）运行时执行 · 每请求鉴权 + default-deny</p>
+  <div class="tags">
+    <span class="tag">多维作用域</span><span class="tag">优先级仲裁</span><span class="tag">First-Match-Wins</span>
+    <span class="tag">责任链引擎</span><span class="tag">反向动作</span><span class="tag">default-deny</span>
+    <span class="tag">Cache-Aside</span><span class="tag">配置热生效</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#sec-bg">① 背景：零信任语义</a>
+  <a href="#sec-overview">② 端到端总览</a>
+  <a href="#sec-select">③ 策略选择层</a>
+  <a href="#sec-exec">④ 规则执行层（责任链）</a>
+  <a href="#sec-cache">⑤ 缓存与生效时效</a>
+  <a href="#sec-example">⑥ 完整实例</a>
+  <a href="#sec-resume">⑦ 简历条目</a>
+  <a href="#sec-qa">⑧ 面试问答</a>
+  <a href="#sec-fix">⑨ 纠错记录与改进点</a>
+</nav>
+
+<!-- ======================= ① 背景 ======================= -->
+<section id="sec-bg">
+  <h2>① 背景：零信任语义与它替代的传统方案</h2>
+  <p>产品官方名称：<strong>钉钉企业应用网关</strong>（零信任 ZTNA 产品）。核心语义：<strong>每次访问内网应用，请求都经过网关做身份认证与策略校验</strong>，
+     而不是「一次连上、处处可达」。</p>
+
+  <h3>1.1 替代的两种传统方案及其痛点</h3>
+  <table>
+    <tr><th style="width:130px">传统方案</th><th>痛点</th><th>ZTNA 如何解决</th></tr>
+    <tr><td><strong>VPN 拨号</strong></td>
+      <td>① <strong>攻击面暴露</strong>：VPN 网关必须在公网开端口（IPSec 500/4500、SSL VPN 443），端口本身就是被扫描、被打漏洞的目标（Fortinet/Pulse 等 VPN 漏洞案例）；<br>
+          ② <strong>过度授权</strong>：一旦连上，用户拿到的是<strong>网络层的整个内网可达性</strong>（IP 层打通），而非按应用授权；<br>
+          ③ <strong>体验差</strong>：要装客户端、手动连接，隧道网络质量差</td>
+      <td>内网<strong>零入站端口</strong>（Connector 从内网主动出站拨号）；授权粒度到<strong>应用级</strong>；浏览器直接访问域名 + 钉钉免登，零客户端</td></tr>
+    <tr><td><strong>端口映射</strong>（内网应用 NAT 映射到公网 IP/URL）</td>
+      <td>内网应用<strong>直接暴露公网</strong>，被扫出弱口令/漏洞即被打穿；中小企业最常用但更危险</td>
+      <td>公网只暴露网关入口，应用本身永不直面公网</td></tr>
+  </table>
+
+  <h3>1.2 default-deny：策略引擎的安全基调</h3>
+  <div class="callout key"><span class="t">一句话</span>
+    用户命中某条策略 → 按该策略的动作处理；<strong>任何策略都没命中 → 默认拒绝</strong>。
+    实现上是一条系统内置的<strong>默认阻断策略，priority=999999</strong>（永远排最后）兜底——
+    「未明确授权即拒绝」，这是零信任区别于「防火墙白名单漏配即放行」的关键。</div>
+</section>
+
+<!-- ======================= ② 端到端总览 ======================= -->
+<section id="sec-overview">
+  <h2>② 端到端总览：配置驱动的策略执行闭环（全栈叙事线）</h2>
+  <div class="flow">
+    <div class="node hl">Console（Java，本人负责）<br><small>策略 CRUD / 作用域 / 规则组 / 排序</small></div>
+    <div class="arrow">→</div>
+    <div class="node">落库 strategy 表<br><small>scope JSON + 规则组 JSON + priority</small></div>
+    <div class="arrow">→</div>
+    <div class="node">Gateway 缓存<br><small>本地内存 / Redis，TTL 300s</small></div>
+    <div class="arrow">→</div>
+    <div class="node hl">请求到来执行<br><small>认证 → 选策略 → 跑规则 → 出动作</small></div>
+  </div>
+  <table>
+    <tr><th style="width:150px">环节</th><th>做什么</th><th style="width:330px">关键代码</th></tr>
+    <tr><td><strong>0. 配置建模</strong>（Console）</td>
+      <td>策略 CRUD：作用域（全员/部门/角色/用户）+ 规则组 JSON（时间/IP/设备）+ action + priority 自增生成 + 拖拽排序</td>
+      <td><span class="src">console: StrategyServiceImpl.java</span></td></tr>
+    <tr><td><strong>1. 策略选择</strong>（Gateway）</td>
+      <td>缓存查「租户+应用」策略列表（order by priority 升序）→ 逐条作用域匹配 → <strong>首条命中即生效</strong>（First-Match-Wins）</td>
+      <td><span class="src">service/strategy/strategy_service.go ListStrategy / checkInScope</span></td></tr>
+    <tr><td><strong>2. 规则执行</strong>（Gateway）</td>
+      <td>责任链执行时间/IP/设备三类规则命令，产出「命中/不命中」布尔</td>
+      <td><span class="src">engine/verifystrategyengine/ · engine/chain/chain.go</span></td></tr>
+    <tr><td><strong>3. 动作仲裁</strong>（Gateway）</td>
+      <td>命中 → 策略自身 action；不命中 → <strong>getOppositeAction（反向动作）</strong>；统一白/黑名单双语义</td>
+      <td><span class="src">service/strategy/strategy_verity_service.go</span></td></tr>
+    <tr><td><strong>4. 拦截/放行</strong>（Gateway）</td>
+      <td>放行 → 继续选连通器转发进隧道；阻断 → 返回 403 拦截页</td>
+      <td><span class="src">handler/http_accesspolicy_interceptor.go</span></td></tr>
+  </table>
+  <div class="callout good"><span class="t">一句话总结（面试可直接用）</span>
+    Console 把「管谁（作用域）+ 什么条件（规则组）+ 怎么处理（action）」建模成 JSON 配置落库；
+    网关在每个请求上执行「<strong>优先级仲裁选出唯一生效策略 → 责任链跑规则 → 反向动作出最终决策</strong>」，
+    未命中任何策略由 priority=999999 的默认阻断策略兜底，落地 default-deny。
+    <strong>这套引擎 v2 Java 版与 v3 Go 版同构</strong>（console 仓库内 strategy/chain 的 TimeRule/NetRule/DeviceRuleCommand 与 Go 侧一一对应），可两版对照讲。</div>
+</section>
+
+<!-- ======================= ③ 策略选择层 ======================= -->
+<section id="sec-select">
+  <h2>③ 策略选择层：作用域匹配 + 优先级仲裁</h2>
+
+  <h3>3.1 作用域匹配：四个维度是「平级 OR」，不是层级递进</h3>
+  <p>Console 上配置一条策略时要选「这条策略管谁」，存成 scope JSON：</p>
+  <pre>{"All": 0, "DeptIds": [101, 102], "RoleIds": [5], "UserIds": ["0221095836..."]}</pre>
+  <p>网关侧匹配逻辑（<span class="src">strategy_service.go checkInScope</span>）：</p>
+  <pre>if ScopeAll == scopeJ.All { return true }                     // ① 全员：All==1 直接命中
+if !util.DisjointInt64(deptIds, scopeJ.DeptIds) { return true } // ② 部门有交集
+if !util.DisjointInt64(roleIds, scopeJ.RoleIds) { return true } // ③ 角色有交集
+if 用户ID ∈ scopeJ.UserIds { return true }                       // ④ 指定用户
+return false</pre>
+  <div class="callout fix"><span class="t">纠错记录：「四级作用域」说法不准确</span>
+    四个维度<strong>没有层层递进的优先级</strong>，是平级的 OR 关系——任一维度命中即算在作用域内。
+    面试正确表述：「<strong>全员/部门/角色/用户 四维作用域，任一命中即匹配</strong>」，不要说成「四级」。</div>
+
+  <h3>3.2 优先级仲裁：First-Match-Wins</h3>
+  <p>一个应用可配多条策略（不同部门不同条件），同一用户可能同时落在多条策略的作用域里——<strong>哪条生效？</strong></p>
+  <pre>策略列表按 order by priority 升序排列（数字越小越优先）
+for _, strategy := range strategies {
+    if checkInScope(strategy) {     // 第一条在作用域内的策略
+        return strategy             // ← 首条命中即生效，后面的不再看
+    }
+}</pre>
+  <ul>
+    <li><strong>priority 数字方向</strong>：值越小 = 优先级越高（排越前）；默认阻断策略 priority=<strong>999999</strong> 永远垫底兜底；</li>
+    <li><strong>新建策略 priority 怎么来</strong>（Console 侧，<span class="src">StrategyServiceImpl.java</span>）：
+      <code class="inline">getLowestStrategy(tenantId).getPriority() + 1</code>——取当前最低优先级再 +1，
+      <strong>新策略默认排队尾</strong>（最小惊讶原则：新策略不会意外覆盖已有策略的行为），第一条策略 priority=0；</li>
+    <li><strong>拖拽重排</strong>：管理员拖动某条策略时，按位移量对受影响区间分组批量更新 priority。</li>
+  </ul>
+
+  <div class="flow">
+    <div class="node">用户请求（已认证）<br><small>租户+应用+部门+角色+用户ID</small></div>
+    <div class="arrow">→</div>
+    <div class="node">缓存取策略列表<br><small>order by priority 升序</small></div>
+    <div class="arrow">→</div>
+    <div class="node hl">逐条 checkInScope<br><small>首条命中即停</small></div>
+    <div class="arrow">→</div>
+    <div class="node">命中策略 → 规则执行</div>
+    <div class="arrow">→</div>
+    <div class="node">全不命中 → 默认阻断<br><small>priority=999999</small></div>
+  </div>
+</section>
+
+<!-- ======================= ④ 规则执行层 ======================= -->
+<section id="sec-exec">
+  <h2>④ 规则执行层：责任链引擎（策略引擎与改写引擎共用底座）</h2>
+
+  <h3>4.1 先拆清楚：规则组 ≠ action，两码事</h3>
+  <div class="callout fix"><span class="t">易错点（面试会被抓）</span>
+    策略的「内容」是两件独立的事：<br>
+    ① <strong>规则组（时间/IP/设备）</strong>只产出一个布尔：<strong>命中/不命中</strong>，它<strong>不表达放行还是拒绝</strong>；<br>
+    ② <strong>action 字段（放行/阻断）</strong>独立存在于策略上，是「放不放行」的基调。<br>
+    最终决策 = 两者组合（<span class="src">strategy_verity_service.go</span>）：
+    <code class="inline">规则命中 → 用策略本身的 action；规则不命中 → getOppositeAction（反向 action）</code></div>
+
+  <h3>4.2 「反向动作」设计：一套引擎统一白/黑名单双语义</h3>
+  <table>
+    <tr><th style="width:150px">策略语义</th><th>action</th><th>规则命中</th><th>规则不命中</th><th>例子</th></tr>
+    <tr><td>白名单</td><td>放行</td><td><strong>放行</strong></td><td>反向→阻断</td><td>「办公网段放行」：在网段内放行，不在就拒</td></tr>
+    <tr><td>黑名单</td><td>阻断</td><td><strong>阻断</strong></td><td>反向→放行</td><td>「高风险设备阻断」：命中设备拒，其余放行</td></tr>
+  </table>
+  <div class="callout good"><span class="t">面试价值</span>
+    面试官问「一条规则既想表达白名单又想表达黑名单怎么做？」——答案就是反向动作：
+    规则只回答「符不符合条件」，放行/阻断由 action 基调 + 命中与否组合得出，<strong>规则与动作正交，避免 N 种规则 × 2 种语义的重复实现</strong>。</div>
+
+  <h3>4.3 责任链引擎 Go 实现（engine/chain/chain.go）</h3>
+  <p>本质行为是<strong>责任链模式的集中调度变体</strong>（≈ Java 的 Spring Interceptor / Servlet FilterChain）：
+     一串处理器按顺序执行，任一节点可中断后续。</p>
+  <pre>// Go 原代码
+type Command interface {
+    Execute(c Context) bool    // 返回 true=继续下一个，false=中断整条链
+    PostProcess(c Context)
+}
+type Chain struct { commands []Command; frozen bool }
+
+func (cb *Chain) Execute(c Context) {
+    continueExecute := true
+    for i := 0; i &lt; len(cb.commands) &amp;&amp; continueExecute; i++ {
+        continueExecute = cb.commands[i].Execute(c)   // ← 返回值决定是否继续传递
+        if !continueExecute { break }
+    }
+}</pre>
+  <h4>逐行翻译成 Java（对照记忆）</h4>
+  <pre>public interface Command {
+    boolean execute(Object ctx);     // true=继续, false=中断
+    void postProcess(Object ctx);
+}
+public class Chain {
+    private final List&lt;Command&gt; commands = new ArrayList&lt;&gt;();
+    public void execute(Object ctx) {
+        for (Command c : commands) {
+            if (!c.execute(ctx)) break;   // 短路
+        }
+    }
+}</pre>
+  <ul>
+    <li>Go 没有 class，「Command 的实现类」就是<strong>实现了该 interface 的 struct</strong>；命令模式/责任链是设计模式，不是语言特性；</li>
+    <li>三个规则命令：<span class="src">timerulecommand.go</span>（星期几 + 时间段）、
+        <span class="src">netrulecommand.go</span>（客户端 IP / CIDR 网段匹配）、
+        <span class="src">devicerulecommand.go</span>（设备标识规则）。</li>
+  </ul>
+  <div class="callout fix"><span class="t">诚实纠错记录</span>
+    ① 本项目所有 Command 的 <code class="inline">PostProcess</code> 都是<strong>空实现</strong>，不要把它当亮点讲；<br>
+    ② 曾口误称其为「命令模式」，按判别标准（Execute 返回值决定是否继续传递）已修正为<strong>责任链模式</strong>。</div>
+</section>
+
+<!-- ======================= ⑤ 缓存与生效时效 ======================= -->
+<section id="sec-cache">
+  <h2>⑤ 缓存与生效时效（含实测数据）</h2>
+
+  <h3>5.1 结构澄清：是「一层缓存 + DB 兜底」，不是三级缓存</h3>
+  <div class="callout fix"><span class="t">纠错记录</span>
+    缓存层只有<strong>一层</strong>，但这一层是<strong>本地内存或 Redis 二选一</strong>，由 Nacos 开关
+    <code class="inline">EnableStrategyLocalCache</code> 切换；DB 是回源兜底。不要说「三级缓存」。</div>
+  <pre>enableLocalCache := config.NacosConfig.DynamicConfig.Get().EnableStrategyLocalCache
+if enableLocalCache { return s.localCache.Get(key) }   // 本地内存模式
+return s.redis.Get(key)                                 // Redis 模式
+// miss → 回源 DB：ListValidByTenantId order by priority → 写回缓存 TTL=300s</pre>
+
+  <h3>5.2 失效机制：写时主动删除（Cache-Aside）+ TTL 兜底，双管齐下</h3>
+  <ul>
+    <li><strong>写时删除</strong>：Console 每个写操作（创建/更新/删除/启停/改优先级）第一行都是
+        <code class="inline">deleteStrategyRedis(tenantId, appIds)</code> 删掉对应 Redis key，再写库——先删缓存后写库；</li>
+    <li><strong>TTL 兜底</strong>：300 秒过期，防删除通知丢失/本地缓存模式下无法主动失效的场景。</li>
+  </ul>
+  <div class="callout key"><span class="t">为什么不只用「更新缓存」而用「删除缓存」？</span>
+    更新缓存要「找出所有受影响 key 并重新聚合出最高优先级策略」，复杂且易错；删除缓存只需删 key，
+    下次请求自然 miss 回源，读路径重建。<strong>Cache-Aside 的标准选择：写删读建，简单且最终一致</strong>。</div>
+
+  <h3>5.3 关键陷阱：写时删除只对 Redis 模式生效</h3>
+  <table>
+    <tr><th>模式</th><th>console 删 Redis key 的效果</th><th>实际生效时间</th></tr>
+    <tr><td>Redis 模式（本地缓存开关关）</td><td>下个请求 miss → 回库 → 读到新策略</td><td><strong>近实时（秒级）</strong></td></tr>
+    <tr><td>本地缓存模式（开关开）</td><td><strong>删了白删</strong>——网关读的是自己进程内存，Redis 被删无感知</td><td><strong>只能等 TTL，最长 300s</strong></td></tr>
+  </table>
+  <div class="callout warn"><span class="t">实测数据（本人环境）</span>
+    本人测试环境策略变更约 <strong>5 分钟</strong>后生效 → 证实该环境启用了本地缓存模式，主动删除路径不生效。
+    <strong>对外表述必须说「分钟级收敛」，不可宣称「秒级生效」</strong>（简历定稿已删除该表述）。</div>
+
+  <h3>5.4 本地缓存多实例的弊端（面试权衡题）</h3>
+  <ul>
+    <li><strong>一致性延迟 + 实例间行为不一致</strong>（最致命）：N 个 Pod 各存一份副本，各自 TTL 到期时间不同——
+        存在窗口期同一用户刷新页面，打到 Pod A 被放行、打到 Pod B 被拦截，体验诡异；</li>
+    <li><strong>内存压力</strong>：每个实例都要承载全量热点数据，无法共享；</li>
+    <li><strong>重启冷启动</strong>：Pod 重启缓存全空，瞬时回源压力集中到 DB。</li>
+  </ul>
+  <p style="font-size:13.5px;color:#6b7280">权衡：本地缓存换「零网络开销、抗 Redis 抖动」，适合策略变更低频的场景；
+     对一致性敏感时切回 Redis 模式。开关做在 Nacos 动态配置，可不发布热切换。</p>
+</section>
+
+<!-- ======================= ⑥ 完整实例 ======================= -->
+<section id="sec-example">
+  <h2>⑥ 完整实例：「仅办公网 + 工作日」策略的端到端时间轴</h2>
+  <p><strong>设定</strong>：租户 corp123；应用「内网 OA」（uuid=4f7a9b2c）；管理员配置策略 A：
+     作用域=研发部，规则组=「IP∈10.20.0.0/16 办公网段 AND 周一至周五 9:00-18:00」，action=放行，priority=1。</p>
+  <div class="timeline">
+    <div class="step"><span class="tlabel">T1</span>Console 配置落库（本人模块）
+      <div class="tbody">策略 A：scope={"DeptIds":[101]}，规则组 JSON 存库，priority=getLowest+1=1；先 deleteStrategyRedis(corp123,[4f7a9b2c]) 再写库</div></div>
+    <div class="step"><span class="tlabel">T2</span>周三 14:00，研发部张三在公司访问 OA
+      <div class="tbody">认证通过（钉钉免登签 JWT）→ 策略拦截器取策略列表（缓存 miss → DB 回源 order by priority）→ 策略 A 作用域：张三∈研发部 ✓ → 首条命中</div></div>
+    <div class="step"><span class="tlabel">T3</span>规则执行
+      <div class="tbody">责任链：NetRule(10.20.1.5 ∈ 10.20.0.0/16 ✓) → TimeRule(周三 14:00 ✓) → 全部命中 → 用策略自身 action=<strong>放行</strong> → 继续选连通器进隧道</div></div>
+    <div class="step"><span class="tlabel">T4</span>周三 22:00，张三加班再访问
+      <div class="tbody">策略 A 仍命中作用域 → TimeRule 不命中（超 18:00）→ <strong>getOppositeAction(放行)=阻断</strong> → 403 拦截页</div></div>
+    <div class="step"><span class="tlabel">T5</span>周六，非研发部李四访问
+      <div class="tbody">策略 A 作用域不匹配（不在研发部）→ 继续看下一条 → 都不匹配 → 落到 priority=999999 默认阻断策略 → <strong>default-deny 生效</strong>，403</div></div>
+    <div class="step"><span class="tlabel">T6</span>管理员把策略 A 改为「全天放行」
+      <div class="tbody">console 先删 Redis key 再写库。Redis 模式：张三下个请求即生效；本地缓存模式：张三最长等 300s TTL 过期（本人实测约 5 分钟）</div></div>
+  </div>
+</section>
+
+<!-- ======================= ⑦ 简历条目 ======================= -->
+<section id="sec-resume">
+  <h2>⑦ 简历条目定稿</h2>
+  <div class="callout key">
+    设计并实现零信任动态访问策略引擎：控制台完成部门/角色/用户多维作用域与优先级建模，网关侧经优先级仲裁选取生效策略、
+    责任链执行时间/IP/设备规则校验，以「反向动作」设计统一白/黑名单双语义，落地 default-deny 访问模型。（约 90 字）
+  </div>
+  <p><strong>紧凑版（一行）</strong>：</p>
+  <div class="callout key">
+    设计零信任动态访问策略引擎：多维作用域 + 优先级仲裁 + 责任链规则校验，统一白/黑名单语义，落地 default-deny 模型。
+  </div>
+  <h4>钩子词与追问引导（简历是鱼饵，深度是面试时的鱼）</h4>
+  <table>
+    <tr><th style="width:220px">面试官看到钩子词追问</th><th>抛出已备好的内容</th></tr>
+    <tr><td>「怎么选策略？」</td><td>First-Match-Wins + 四维作用域平级 OR + priority 创建时自增排队尾</td></tr>
+    <tr><td>「规则怎么执行？」</td><td>责任链短路 + 反向动作统一白/黑名单 + default-deny 兜底</td></tr>
+    <tr><td>「性能/一致性？」</td><td>Cache-Aside 写时删除 + TTL 兜底 + 本地/Redis 开关切换（缓存细节不给简历，口头展开）</td></tr>
+  </table>
+  <div class="callout warn"><span class="t">定稿删除项及原因</span>
+    ① 「秒级生效」→ 实测 5 分钟（本地缓存模式），写了就是挖坑；
+    ② 缓存细节（Cache-Aside/防穿透/本地-Redis 切换）→ 留给性能工程条目，避免两条亮点重复。</div>
+</section>
+
+<!-- ======================= ⑧ 面试问答 ======================= -->
+<section id="sec-qa">
+  <h2>⑧ 面试深挖问答清单</h2>
+  <table>
+    <tr><th style="width:290px">可能的追问</th><th>回答要点</th></tr>
+    <tr><td>零信任到底解决了什么问题？</td>
+      <td>替代 VPN/端口映射：① VPN 公网端口是攻击面，ZTNA 内网零入站端口（Connector 出站拨号）；② VPN 是网络层全内网可达，ZTNA 是应用级授权 + 每请求鉴权；③ 免客户端、钉钉免登体验更好。</td></tr>
+    <tr><td>多条策略同时匹配怎么办？</td>
+      <td>order by priority 升序 + First-Match-Wins：首条作用域命中的策略生效，后面不再看；priority 创建时自增排队尾，管理员可拖拽重排。</td></tr>
+    <tr><td>一条规则怎么同时表达白名单和黑名单？</td>
+      <td>规则组只产出「命中/不命中」布尔，action 独立存在：命中用自身 action，不命中用反向 action。规则与动作正交。</td></tr>
+    <tr><td>都没命中任何策略呢？</td>
+      <td>default-deny：内置默认阻断策略 priority=999999 兜底，未明确授权即拒绝。</td></tr>
+    <tr><td>这个责任链和经典 GoF 责任链的区别？</td>
+      <td>是集中调度变体：链由外部统一遍历（Execute 返回值控制中断），不是节点自传递；类比 Spring Interceptor / Servlet FilterChain。</td></tr>
+    <tr><td>策略变更多久生效？</td>
+      <td>诚实回答分模式：Redis 模式写时删缓存近实时；本地缓存模式删 Redis 对进程内存无效，靠 TTL 300s，实测约 5 分钟。</td></tr>
+    <tr><td>为什么写时删缓存而不是更新缓存？</td>
+      <td>更新要重新聚合出最高优先级策略、复杂易错；删除只需删 key，下次 miss 自然回源重建。Cache-Aside 标准做法，简单且最终一致。</td></tr>
+    <tr><td>本地缓存多实例有什么弊端？</td>
+      <td>副本不同步：TTL 到期时间各异 → 窗口期同一用户在不同 Pod 得到不同结果；另有内存压力与重启冷启动回源压力。一致性敏感场景切 Redis 模式（Nacos 开关热切换）。</td></tr>
+    <tr><td>v2 Java 版和 v3 Go 版什么关系？</td>
+      <td>v3 Go 网关的策略/改写引擎是 v2 Java 版的重写移植，console 仓库 strategy/chain 下 TimeRule/NetRule/DeviceRuleCommand 与 Go 侧一一对应，可对照讲演进动机（性能/解耦）。</td></tr>
+  </table>
+</section>
+
+<!-- ======================= ⑨ 纠错记录与改进点 ======================= -->
+<section id="sec-fix">
+  <h2>⑨ 纠错记录与改进点（诚实素材）</h2>
+  <h3>9.1 研究过程中的纠错记录（防止旧说法复燃）</h3>
+  <table>
+    <tr><th style="width:260px">错误说法</th><th>正确说法</th></tr>
+    <tr><td>「四级作用域」层层递进</td><td>四维作用域<strong>平级 OR</strong>，任一命中即匹配</td></tr>
+    <tr><td>「三级缓存」</td><td>一层缓存（本地内存/Redis 二选一）+ DB 兜底</td></tr>
+    <tr><td>「策略变更秒级生效」</td><td>Redis 模式近实时；本地缓存模式靠 TTL，实测约 5 分钟</td></tr>
+    <tr><td>「命令模式组织的处理链」</td><td>责任链模式（集中调度变体）；命令模式是口误已修正</td></tr>
+    <tr><td>把 PostProcess 反向回卷当亮点</td><td>所有 Command 的 PostProcess 均为空实现，不讲</td></tr>
+    <tr><td>「根据内容过滤判断」混着说</td><td>规则组（命中布尔）与 action（放行/阻断）是两码事，组合出最终决策</td></tr>
+  </table>
+  <h3>9.2 可改进点（被问「有什么不足」时用）</h3>
+  <ul>
+    <li><strong>本地缓存模式无主动失效通道</strong>：console 删 Redis 对网关进程内存无效，可引入 Redis pub/sub 广播失效事件或基于 Nacos 配置变更推送主动清本地缓存，把生效时效从分钟级压到秒级；</li>
+    <li><strong>策略列表全量加载</strong>：每次 miss 回源拉该租户全部策略，策略数量大时可分页/按应用维度拆分缓存 key；</li>
+    <li><strong>拖拽排序的并发窗口</strong>：多管理员同时拖拽批量更新 priority 存在竞争，可加乐观锁或租户级分布式锁。</li>
+  </ul>
+</section>
+
+<footer>
+  亮点 2 研究文档 · 基于 lippi-open-ztna-gateway(Go, v3) 与 lippi-open-ztna(Java, v2 console) 源码调研 · 本文档随会话讨论持续迭代
+</footer>
+
+</div>
+</body>
+</html>

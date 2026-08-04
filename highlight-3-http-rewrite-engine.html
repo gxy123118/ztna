@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>亮点3：HTTP改写引擎</title>
+<style>
+  :root {
+    --primary: #1a56db; --primary-light: #e8f0fe;
+    --ok: #0e9f6e; --warn: #c27803; --danger: #e02424;
+    --bg: #f7f8fa; --card: #ffffff; --border: #e5e7eb;
+    --text: #1f2937; --text-sub: #6b7280; --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.75; font-size: 15px; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  header.hero { background: linear-gradient(135deg, #1a3a8f, #1a56db);
+    color: #fff; border-radius: 14px; padding: 34px 36px; margin-bottom: 20px; }
+  header.hero h1 { font-size: 26px; margin-bottom: 10px; }
+  header.hero p { opacity: .92; font-size: 14.5px; }
+  header.hero .tags { margin-top: 14px; }
+  header.hero .tag { display: inline-block; background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.3); border-radius: 20px;
+    padding: 3px 13px; font-size: 12.5px; margin: 3px 6px 0 0; }
+
+  nav.toc { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 22px; margin-bottom: 24px; position: sticky; top: 10px; z-index: 99;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  nav.toc a { color: var(--primary); text-decoration: none; font-size: 13.5px;
+    margin-right: 16px; white-space: nowrap; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px 32px; margin-bottom: 24px; }
+  h2 { font-size: 21px; color: var(--primary); border-left: 5px solid var(--primary);
+    padding-left: 12px; margin-bottom: 18px; }
+  h3 { font-size: 17px; margin: 22px 0 10px; color: #111827; }
+  h4 { font-size: 15px; margin: 16px 0 8px; color: #374151; }
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin-bottom: 5px; }
+  strong { color: #111827; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 14px; }
+  th { background: var(--primary-light); color: #1e3a8a; text-align: left;
+    padding: 9px 12px; border: 1px solid #d3ddf3; }
+  td { padding: 9px 12px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  pre { background: #0f172a; color: #d8e1f0; border-radius: 10px; padding: 18px 20px;
+    overflow-x: auto; font-size: 13px; line-height: 1.65; margin: 12px 0 18px;
+    font-family: "SF Mono", Menlo, Consolas, monospace; }
+  code.inline { background: var(--code-bg); color: #b91c1c; border-radius: 4px;
+    padding: 1px 6px; font-size: 13px; font-family: Menlo, Consolas, monospace; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px; font-size: 14px; }
+  .callout.key { background: #eef6ff; border-left: 4px solid var(--primary); }
+  .callout.good { background: #f0faf5; border-left: 4px solid var(--ok); }
+  .callout.warn { background: #fdf8ef; border-left: 4px solid var(--warn); }
+  .callout.fix { background: #fdf2f2; border-left: 4px solid var(--danger); }
+  .callout .t { font-weight: 700; margin-bottom: 4px; display: block; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0; }
+  .flow .node { background: var(--primary-light); border: 1.5px solid #b5c8f0;
+    color: #1e3a8a; border-radius: 8px; padding: 8px 14px; font-size: 13.5px;
+    font-weight: 600; text-align: center; }
+  .flow .node.hl { background: #1a56db; color: #fff; border-color: #1a56db; }
+  .flow .arrow { color: #9ca3af; font-size: 17px; font-weight: 700; }
+
+  .timeline { border-left: 3px solid #c7d6f5; margin: 14px 0 18px 8px; padding-left: 22px; }
+  .timeline .step { position: relative; margin-bottom: 16px; }
+  .timeline .step::before { content: ""; position: absolute; left: -29.5px; top: 7px;
+    width: 12px; height: 12px; border-radius: 50%; background: var(--primary);
+    border: 2.5px solid #fff; box-shadow: 0 0 0 2px #c7d6f5; }
+  .timeline .step .tlabel { display: inline-block; background: var(--primary); color: #fff;
+    font-size: 12px; font-weight: 700; border-radius: 5px; padding: 1px 9px; margin-right: 8px; }
+  .timeline .step .tbody { margin-top: 4px; font-size: 14px; color: #374151; }
+
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .cols2 { grid-template-columns: 1fr; } }
+  .minicard { border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; background: #fbfcfe; }
+  .minicard h4 { margin-top: 0; }
+
+  .src { font-size: 12.5px; color: var(--text-sub); font-family: Menlo, monospace;
+    background: var(--code-bg); border-radius: 5px; padding: 1px 7px; }
+  footer { text-align: center; color: var(--text-sub); font-size: 12.5px; margin-top: 30px; }
+
+  .qa-item { margin-bottom: 24px; }
+  .qa-item .q { font-weight: 700; color: var(--primary); margin-bottom: 8px; font-size: 14.5px; }
+  .qa-item .a { padding-left: 20px; color: var(--text); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <h1>亮点 3：HTTP 改写引擎</h1>
+  <p>钉钉零信任网关（ZTNA）· 链接翻译 + Cookie 隔离 + 灵活改写规则 · 让用户无缝使用网关代理的内网应用，无需修改应用代码</p>
+  <div class="tags">
+    <span class="tag">链接翻译</span><span class="tag">四维匹配</span><span class="tag">责任链模式</span>
+    <span class="tag">Cookie隔离</span><span class="tag">Redis容错</span><span class="tag">字符串替换</span>
+    <span class="tag">appUuid隔离</span><span class="tag">fail-open</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#scenario">业务场景</a>
+  <a href="#flow">流程设计</a>
+  <a href="#implementation">实现细节</a>
+  <a href="#qa">面试Q&A</a>
+  <a href="#resume">简历版本</a>
+</nav>
+
+<!-- ============ 业务场景 ============ -->
+<section id="scenario">
+<h2>业务场景</h2>
+
+<h3>核心问题</h3>
+<p>用户通过ZTNA网关访问内网应用时，面临三个问题：</p>
+<ol>
+  <li><strong>链接地址不匹配：</strong>内网返回的HTML/JS里包含内网地址（如 <code class="inline">oa.internal.com</code>），浏览器按这个地址访问就绕过了网关的安全检查</li>
+  <li><strong>Cookie跨域存储失败：</strong>内网应用返回 <code class="inline">Set-Cookie: Domain=oa.internal.com</code>，浏览器因跨域拒绝存储</li>
+  <li><strong>多应用Cookie串域：</strong>多个应用共享网关域名（<code class="inline">.gateway.com</code>），Cookie可能混乱或串域</li>
+</ol>
+
+<h3>业务需求示例</h3>
+<table>
+  <thead><tr><th>场景</th><th>改写方向</th><th>例子</th><th>业务价值</th></tr></thead>
+  <tbody>
+    <tr><td>内网地址泄露</td><td>响应改写</td><td>HTML中 <code class="inline">&lt;script src="oa.internal/app.js"&gt;</code> → <code class="inline">&lt;script src="oa.gateway.com/app.js"&gt;</code></td><td>隐藏内网拓扑，浏览器继续走网关</td></tr>
+    <tr><td>应用升级版本切换</td><td>请求改写</td><td>前端仍调 <code class="inline">/api/v1</code>，网关改成 <code class="inline">/api/v2</code></td><td>灰度升级，不需要修改前端代码</td></tr>
+    <tr><td>Cookie跨域和隔离</td><td>自动改写</td><td>内网 <code class="inline">Domain=oa.internal.com</code> → 改成 <code class="inline">Domain=.gateway.com</code>，用appUuid隔离</td><td>支持SSO，防止串域</td></tr>
+  </tbody>
+</table>
+
+</section>
+
+<!-- ============ 流程设计 ============ -->
+<section id="flow">
+<h2>流程设计</h2>
+
+<h3>整体架构</h3>
+<div class="callout key">
+  <span class="t">为什么选择应用层而非Nginx？</span>
+  Nginx的 <code class="inline">sub_filter</code> 只能做无状态的字符串替换，无法：(1)改写HTTP头的Set-CookieDomain；(2)访问业务上下文（谁在访问？哪个应用？）；(3)做应用级Cookie隔离。ZTNA的零信任原则要求身份感知的改写机制，所以必须在应用层实现。
+</div>
+
+<h3>改写引擎的两个方向</h3>
+
+<h4>✅ 响应改写流程</h4>
+<div class="timeline">
+  <div class="step"><span class="tlabel">1</span><span class="tbody"><strong>内网返回响应</strong>：HTML里包含 <code class="inline">oa.internal.com/api/v1</code></span></div>
+  <div class="step"><span class="tlabel">2</span><span class="tbody"><strong>链接翻译</strong>：检查是否需要改写（内容类型、大小&lt;2MB）</span></div>
+  <div class="step"><span class="tlabel">3</span><span class="tbody"><strong>字符串替换</strong>：三层替换（完整URL→Host→Domain），防止短片段误伤</span></div>
+  <div class="step"><span class="tlabel">4</span><span class="tbody"><strong>Cookie改写</strong>：自动把 <code class="inline">Domain=oa.internal.com</code> 改成 <code class="inline">Domain=.gateway.com</code></span></div>
+  <div class="step"><span class="tlabel">5</span><span class="tbody"><strong>Redis缓存</strong>：记录原始Domain（用appUuid+cookieName+userId+cookieValue做sha256哈希作key）</span></div>
+  <div class="step"><span class="tlabel">6</span><span class="tbody"><strong>返回浏览器</strong>：浏览器接收改写后的链接和cookie，继续走网关</span></div>
+</div>
+
+<h3>Cookie隔离的两个分支</h3>
+<table>
+  <thead><tr><th>场景</th><th>内网返回的Domain</th><th>改写后的Domain</th><th>效果</th></tr></thead>
+  <tbody>
+    <tr><td><strong>应用级隔离</strong></td><td><code class="inline">oa.internal.com</code></td><td><code class="inline">oa.gateway.com</code>（访问域名）</td><td>只有OA应用能用，ERP无法访问</td></tr>
+    <tr><td><strong>SSO支持</strong></td><td><code class="inline">.internal.com</code>（父域）</td><td><code class="inline">.gateway.com</code>（共享域）</td><td>所有应用共享这个cookie，支持单点登录</td></tr>
+    <tr><td><strong>不改</strong></td><td>不等于且不是后缀</td><td>保持原样</td><td>无法改写，保留原值</td></tr>
+  </tbody>
+</table>
+
+<h3>大小限制与性能</h3>
+<table>
+  <thead><tr><th>场景</th><th>限制</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>请求改写</td><td>1MB</td><td>表单提交等请求体超过1MB不改写</td></tr>
+    <tr><td>响应改写（普通应用）</td><td>2MB</td><td>HTML/JS等响应超过2MB不改写</td></tr>
+    <tr><td>响应改写（灰度应用）</td><td>10MB</td><td>某些应用单独配置更高限制</td></tr>
+  </tbody>
+</table>
+
+<div class="callout good">
+  <span class="t">为什么选择2MB？</span>
+  在内存占用、响应延迟、业务需求三个维度的平衡：(1)内存：10个并发请求×2MB=20MB（可接受）；(2)延迟：2MB字符串替换~50-100ms，用户无感；(3)业务：99%的真实HTML都&lt;2MB，超过2MB通常是SPA或视频，改写意义不大。
+</div>
+
+</section>
+
+<!-- ============ 实现细节 ============ -->
+<section id="implementation">
+<h2>实现细节</h2>
+
+<h3>核心文件位置</h3>
+<table>
+  <thead><tr><th>文件</th><th>行数</th><th>功能</th></tr></thead>
+  <tbody>
+    <tr><td><span class="src">handler/cookie_handler.go</span></td><td>191</td><td>Cookie自动改写、Redis隔离</td></tr>
+    <tr><td><span class="src">util/linktranslateutil/linktranslateutil.go</span></td><td>534</td><td>链接翻译、字符串替换、编码处理</td></tr>
+    <tr><td><span class="src">engine/rewriteengine/rewriteengine.go</span></td><td>83</td><td>改写引擎注册和执行</td></tr>
+    <tr><td><span class="src">engine/chain/chain.go</span></td><td>43</td><td>责任链模式实现</td></tr>
+  </tbody>
+</table>
+
+<h3>Cookie隔离核心机制</h3>
+
+<h4>问题：为什么需要Redis？</h4>
+<p>多个应用共享网关域名 <code class="inline">.gateway.com</code>，所有应用的cookie都被改写到这个共享域。浏览器会自动发送所有相关的cookie，导致OA签发的sessioncookie可能被ERP收到。</p>
+
+<h4>解决方案：appUuid隔离</h4>
+<div class="flow">
+  <span class="node">响应时</span>
+  <span class="arrow">→</span>
+  <span class="node hl">记录cookie</span>
+  <span class="arrow">→</span>
+  <span class="node">Redis: sha256(appUuid_oa ^ sessionId ^ alice ^ aaa)</span>
+</div>
+
+<div class="flow">
+  <span class="node">请求时</span>
+  <span class="arrow">→</span>
+  <span class="node hl">验证cookie</span>
+  <span class="arrow">→</span>
+  <span class="node">Redis: sha256(appUuid_erp ^ sessionId ^ alice ^ aaa) = 查不到</span>
+</div>
+
+<h3>三层替换，防止短片段误伤</h3>
+<pre>❌ 错误：替换"internal.com"→"gateway.com"
+  原文："https://oa.internal.com/api 和 team-internal.com/data"
+  结果："https://oa.gateway.com/api 和 team-gateway.com/data" ← 误伤！
+
+✅ 正确：按长度从长到短
+  第1层：替换完整URL
+  第2层：替换Host
+  第3层：替换Domain（最后一步最安全）</pre>
+
+<h3>fail-open容错策略</h3>
+
+<h4>Redis宕机会怎样？</h4>
+<table>
+  <thead><tr><th>阶段</th><th>正常行为</th><th>Redis宕机后</th><th>后果</th></tr></thead>
+  <tbody>
+    <tr><td>响应处理</td><td>记录cookie原始Domain到Redis</td><td>记录失败，继续执行</td><td>Redis没有数据</td></tr>
+    <tr><td>请求处理</td><td>查Redis校验cookie归属</td><td>查询失败，所有cookie都放行</td><td>可能出现串域</td></tr>
+    <tr><td>业务影响</td><td>严格隔离</td><td>隔离失效，但业务继续</td><td>可用性优先</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <span class="t">为什么选择fail-open？</span>
+  ZTNA在零信任网络环境下，暂时的串域风险&lt;业务完全不可用。另外，Redis宕机在实际环境中很少发生，且系统还有其他安全层（如JWT验签）兜底。
+</div>
+
+</section>
+
+<!-- ============ 面试Q&A ============ -->
+<section id="qa">
+<h2>面试 Q&A</h2>
+
+<div class="qa-item">
+  <div class="q">Q1: 改写引擎解决了什么核心问题？</div>
+  <div class="a">
+    <p><strong>答：</strong>用户通过网关访问内网应用时，内网返回的链接和Cookie仍然指向内网地址，导致浏览器无法继续走网关的安全检查。改写引擎通过自动改写链接和Cookie，确保：(1)链接翻译——HTML里的内网地址自动改成网关地址；(2)Cookie跨域——改写CookieDomain让浏览器能存储；(3)应用隔离——用appUuid隔离，多应用不串域。</p>
+  </div>
+</div>
+
+<div class="qa-item">
+  <div class="q">Q2: CookieDomain改写是自动的还是需要配置？</div>
+  <div class="a">
+    <p><strong>答：</strong>完全自动，代码硬编码在 <code class="inline">cookie_handler.go</code> 中。响应时自动记录原始Domain到Redis（key=sha256(appUuid^cookieName^userId^cookieValue)），同时改写Domain到网关共享域。请求时用当前应用的appUuid查Redis，校验这个cookie是否属于当前应用。</p>
+  </div>
+</div>
+
+<div class="qa-item">
+  <div class="q">Q3: 链接翻译怎么处理大文件？</div>
+  <div class="a">
+    <p><strong>答：</strong>用字符串替换（不是DOM解析），有大小限制。超过限制的文件直接跳过改写，原样转发。三层替换按长度从长到短，防止短片段误伤。2MB文件耗时~50-100ms。</p>
+  </div>
+</div>
+
+<div class="qa-item">
+  <div class="q">Q4: Redis宕机了会怎样？</div>
+  <div class="a">
+    <p><strong>答：</strong>采用fail-open策略。Redis宕机时，响应处理记录失败但继续执行，请求处理查询失败则所有cookie都放行。可能出现串域，但业务继续可用。这是有意的设计权衡：可用性优先于绝对安全。</p>
+  </div>
+</div>
+
+<div class="qa-item">
+  <div class="q">Q5: 为什么不用Nginx的sub_filter？</div>
+  <div class="a">
+    <p><strong>答：</strong>Nginx只能做无状态的字符串替换，无法：(1)改写HTTP头的Set-CookieDomain；(2)访问业务上下文（appUuid、userId）；(3)做应用级Cookie隔离。ZTNA的零信任原则要求身份感知的改写机制，这必须在应用层实现。</p>
+  </div>
+</div>
+
+<div class="qa-item">
+  <div class="q">Q6: CookieDomain改写的两个分支是什么？</div>
+  <div class="a">
+    <p><strong>答：</strong>分支1——内网Domain等于目标内网域名时，改成访问域名（应用隔离）；分支2——内网Domain是目标内网域名的父域时，改成网关共享域（SSO支持）；都不匹配则不改写。</p>
+  </div>
+</div>
+
+<div class="qa-item">
+  <div class="q">Q7: 为什么2MB而不是10MB或100MB？</div>
+  <div class="a">
+    <p><strong>答：</strong>三个维度的平衡：(1)内存占用——10个并发×2MB=20MB可接受，100MB就是1GB会OOM；(2)响应延迟——2MB替换~50-100ms无感，100MB可能2-5秒用户卡；(3)业务需求——99%的HTML都&lt;2MB，超过通常是SPA或视频，改写意义不大。</p>
+  </div>
+</div>
+
+<div class="qa-item">
+  <div class="q">Q8: 如果应用返回1GB的HTML来DoS，网关会崩溃吗？</div>
+  <div class="a">
+    <p><strong>答：</strong>不会。第一层防护是大小检查——超过2MB直接跳过改写，原样转发。第二层防护是超时控制——即使应用伪造Content-Length，网关超时中断时操作系统的OOMkiller会处理。这是已知的边界情况，但实际环境很少发生。</p>
+  </div>
+</div>
+
+</section>
+
+<!-- ============ 简历版本 ============ -->
+<section id="resume">
+<h2>简历版本</h2>
+
+<h3>一句话版本（推荐用这个）</h3>
+<div class="callout good">
+  <p style="font-size: 15px; line-height: 1.8;">
+    <strong>设计并实现了HTTP改写引擎，支持链接自动翻译、四维条件匹配、责任链改写和Cookie自动隔离（通过appUuid+Redis），让多个应用在共享网关域名下安全运行，无需修改应用代码。</strong>
+  </p>
+</div>
+
+<h3>STAR答题框架</h3>
+
+<h4>背景（Situation）</h4>
+<p>ZTNA网关是零信任网络访问产品，用户通过网关代理访问企业内网应用。但内网应用返回的链接和Cookie仍指向内网地址，导致浏览器无法存储跨域cookie且多应用共享网关域名时cookie串域。</p>
+
+<h4>任务（Task）</h4>
+<p>设计实现HTTP改写引擎，自动改写链接和Cookie，实现应用级隔离，让用户无缝使用网关代理的应用而无需修改代码。</p>
+
+<h4>行动（Action）</h4>
+<ul>
+  <li><strong>链接翻译：</strong>三层替换（完整URL→Host→Domain）按长度从长到短，字符串替换防止误伤，2MB大小限制避免OOM</li>
+  <li><strong>Cookie隔离：</strong>响应时记录原始Domain到Redis（key=sha256(appUuid^cookieName^userId^cookieValue)），请求时用appUuid查Redis实现应用级隔离</li>
+  <li><strong>改写规则：</strong>责任链模式五个Command，支持四维条件匹配和环境变量注入，Nacos热生效无需重启</li>
+  <li><strong>容错设计：</strong>Redis宕机时fail-open策略保证业务可用</li>
+</ul>
+
+<h4>结果（Result）</h4>
+<ul>
+  <li>✅ 完全自动化，无需配置</li>
+  <li>✅ 防止多应用cookie串域，支持SSO</li>
+  <li>✅ 零修改迁移应用到网关</li>
+  <li>✅ 灵活定制满足客户个性化需求</li>
+</ul>
+
+</section>
+
+<footer>
+  <p>生成时间：2026年8月 | ZTNA网关技术亮点 | 面试准备文档</p>
+</footer>
+
+</div>
+</body>
+</html>
